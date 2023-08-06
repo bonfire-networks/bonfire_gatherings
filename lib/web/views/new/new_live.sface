@@ -1,0 +1,115 @@
+  <Bonfire.Files.Web.UploadBannerLive
+    id={:upload_banner}
+    object={%{}}
+    set_field={:category}
+    set_fn={&Bonfire.Classify.LiveHandler.set_image/5}
+  />
+<Form
+  for={%{}}
+  as={:category}
+  id="new_gathering_form"
+  class="p-3 mt-3"
+  submit="Bonfire.UI.Groups:new"
+  action="Bonfire.UI.Groups:new"
+  change="Bonfire.Classify:validate"
+  opts={autocomplete: "off"}
+>
+
+
+  <div class="w-full form-control">
+    <input
+      x-model="name"
+      id="name"
+      name="name"
+      type="text"
+      placeholder={l("Type the gathering title")}
+      class="w-full text-sm input input-bordered"
+    />
+  </div>
+
+  <div class="flex my-6 items-center gap-6">
+  <div class="flex flex-col flex-1 gap-2">
+    <span class="text-xs uppercase text-base-content/70 font-semibold">When the event start</span>
+    <input type="datetime-local" name="date" class="input input-bordered" />
+  </div>
+  <div class="flex flex-col flex-1 gap-2">
+    <span class="text-xs uppercase text-base-content/70 font-semibold">When the event End</span>
+    <input type="datetime-local" name="date" class="input input-bordered" />
+  </div>
+</div>
+
+
+  <div class="flex my-6 flex-col flex-1 gap-2">
+    <span class="text-xs uppercase text-base-content/70 font-semibold">Location</span>
+    <input type="text" name="where" class="input input-bordered" />
+  </div>
+
+  <div class="w-full mt-3 form-control">
+    <textarea
+      name="summary"
+      class="w-full textarea h-40 textarea-bordered"
+      placeholder="What the gathering is about"
+    />
+  </div>
+
+  <div x-data="{boundaries: 'open'}" class="w-full mt-6 form-control">
+    <span class="text-xs uppercase text-base-content/70 font-semibold">Gathering visibility</span>
+    <select
+      x-model="boundaries"
+      id="new_group_boundaries"
+      name="to_boundaries[]"
+      class="mt-2 select select-bordered"
+    >
+      <option value="open">{l("Open")}</option>
+      <option value="visible" disabled>{l("Visible")}</option>
+      <option value="private" disabled>{l("Private")}</option>
+    </select>
+
+    <div x-cloak x-show="boundaries === 'open'">
+      <div class="alert alert-info !flex items-top mt-2 rounded">
+        <#Icon solid="Globe" class="w-6 h-6" />
+        <span class="text-sm">{l("Open") <> ": " <> Config.get([:ui, :group, :preset_descriptions, "open"], "")}</span>
+      </div>
+    </div>
+
+    <div x-cloak x-show="boundaries === 'visible'">
+      <div class="alert alert-info !flex items-top mt-2 rounded">
+        <#Icon iconify="mdi:eye-outline" class="w-6 h-6" />
+        <span class="text-sm">{l("Visible") <> ": " <> Config.get([:ui, :group, :preset_descriptions, "visible"], "")}</span>
+      </div>
+    </div>
+
+    <div x-cloak x-show="boundaries === 'private'">
+      <div class="alert alert-info !flex items-top mt-2 rounded">
+        <#Icon iconify="heroicons-solid:lock-closed" class="w-6 h-6" />
+        <span class="text-sm">{l("Private") <> ": " <> Config.get([:ui, :group, :preset_descriptions, "private"], "")}</span>
+      </div>
+    </div>
+  </div>
+
+
+
+
+
+  <!-- <div class="w-full rounded form-control bg-base-content/5">
+    <div class="p-4">
+      <div class="flex items-center justify-between gap-6">
+        <div class="flex flex-col gap-1">
+          <div class="text-sm font-bold">{l("Visibility")}</div>
+          <div class="text-sm font-light text-base-content/70">{l("Make the group public so anyone can find the group, see the topics within it, and read public posts.")}</div>
+        </div>
+        <input name="to_boundaries[]" value="visible" checked="checked" type="checkbox" class="toggle">
+      </div>
+    </div>
+  </div> -->
+
+  <input type="hidden" name="context_id" >
+
+  <button
+    x-bind:disabled="name.length == 0"
+    type="submit"
+    class="w-full mt-6 normal-case rounded-full btn btn-primary"
+  >
+    {l("Create")}
+  </button>
+</Form>

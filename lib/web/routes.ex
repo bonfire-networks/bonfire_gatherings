@@ -27,6 +27,7 @@ defmodule Bonfire.Gatherings.Web.Routes do
       scope "/gatherings/", Bonfire.Gatherings.Web do
         pipe_through(:browser)
         pipe_through(:user_required)
+        live("/new", NewLive)
       end
 
       # pages only admins can view
