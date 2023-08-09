@@ -40,7 +40,6 @@
 #     field(:status, :boolean, virtual: true)
 #     field(:draft, :boolean)
 
-
 #     field(:is_public, :boolean, virtual: true)
 #     field(:is_disabled, :boolean, virtual: true, default: false)
 

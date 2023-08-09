@@ -1,9 +1,9 @@
-  <Bonfire.Files.Web.UploadBannerLive
-    id={:upload_banner}
-    object={%{}}
-    set_field={:category}
-    set_fn={&Bonfire.Classify.LiveHandler.set_image/5}
-  />
+<Bonfire.Files.Web.UploadBannerLive
+  id={:upload_banner}
+  object={%{}}
+  set_field={:category}
+  set_fn={&Bonfire.Classify.LiveHandler.set_image/5}
+/>
 <Form
   for={%{}}
   as={:category}
@@ -14,8 +14,6 @@
   change="Bonfire.Classify:validate"
   opts={autocomplete: "off"}
 >
-
-
   <div class="w-full form-control">
     <input
       x-model="name"
@@ -28,20 +26,19 @@
   </div>
 
   <div class="flex my-6 items-center gap-6">
-  <div class="flex flex-col flex-1 gap-2">
-    <span class="text-xs uppercase text-base-content/70 font-semibold">When the event start</span>
-    <input type="datetime-local" name="date" class="input input-bordered" />
+    <div class="flex flex-col flex-1 gap-2">
+      <span class="text-xs uppercase text-base-content/70 font-semibold">When the event start</span>
+      <input type="datetime-local" name="date" class="input input-bordered">
+    </div>
+    <div class="flex flex-col flex-1 gap-2">
+      <span class="text-xs uppercase text-base-content/70 font-semibold">When the event End</span>
+      <input type="datetime-local" name="date" class="input input-bordered">
+    </div>
   </div>
-  <div class="flex flex-col flex-1 gap-2">
-    <span class="text-xs uppercase text-base-content/70 font-semibold">When the event End</span>
-    <input type="datetime-local" name="date" class="input input-bordered" />
-  </div>
-</div>
-
 
   <div class="flex my-6 flex-col flex-1 gap-2">
     <span class="text-xs uppercase text-base-content/70 font-semibold">Location</span>
-    <input type="text" name="where" class="input input-bordered" />
+    <input type="text" name="where" class="input input-bordered">
   </div>
 
   <div class="w-full mt-3 form-control">
@@ -87,10 +84,6 @@
     </div>
   </div>
 
-
-
-
-
   <!-- <div class="w-full rounded form-control bg-base-content/5">
     <div class="p-4">
       <div class="flex items-center justify-between gap-6">
@@ -103,7 +96,7 @@
     </div>
   </div> -->
 
-  <input type="hidden" name="context_id" >
+  <input type="hidden" name="context_id">
 
   <button
     x-bind:disabled="name.length == 0"
