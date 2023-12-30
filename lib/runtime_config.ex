@@ -10,7 +10,7 @@ defmodule Bonfire.Gatherings.RuntimeConfig do
   def config do
     import Config
 
-    config :bonfire_gatherings,
-      disabled: false
+    # config :bonfire_gatherings,
+    #   modularity: :disabled
   end
 end

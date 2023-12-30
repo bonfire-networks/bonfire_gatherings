@@ -1,4 +1,5 @@
-<Bonfire.Files.Web.UploadBannerLive
+<StatefulComponent
+  module={maybe_component(Bonfire.Files.Web.UploadBannerLive, @__context__)}
   id={:upload_banner}
   object={%{}}
   set_field={:category}
