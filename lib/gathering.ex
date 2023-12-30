@@ -1,11 +1,11 @@
 # # SPDX-License-Identifier: AGPL-3.0-only
 # defmodule Bonfire.Gathering.Gathering do
-#   use Pointers.Pointable,
+#   use Needle.Pointable,
 #     otp_app: :bonfire_gathering,
 #     source: "category",
 #     table_id: "2AGSCANBECATEG0RY0RHASHTAG"
 
-#   import Flexto
+#   import Exto
 #   import Untangle
 
 #   @behaviour Bonfire.Common.SchemaModule
@@ -20,14 +20,14 @@
 #   alias Bonfire.Gathering.Gathering
 #   alias Bonfire.Classify.Tree
 #   alias Bonfire.Common.Utils
-#   alias Pointers.Changesets
+#   alias Needle.Changesets
 
 #   @type t :: %__MODULE__{}
 #   @cast ~w(id type)a
 
 #   pointable_schema do
 #     # of course, category can usually be used as a tag
-#     has_one(:tag, Pointers.Pointer, foreign_key: :id)
+#     has_one(:tag, Needle.Pointer, foreign_key: :id)
 
 #     field(:name, :string, virtual: true)
 #     field(:summary, :string, virtual: true)
@@ -56,7 +56,7 @@
 #     %Category{}
 #     |> Changesets.cast(attrs, @cast)
 #     |> Changeset.change(
-#       id: Utils.e(attrs, :id, nil) || Pointers.ULID.generate(),
+#       id: Utils.e(attrs, :id, nil) || Needle.ULID.generate(),
 #       is_public: true
 #     )
 #     |> common_changeset(attrs, is_local?)
