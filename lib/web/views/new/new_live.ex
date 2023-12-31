@@ -9,7 +9,7 @@ defmodule Bonfire.Gatherings.Web.NewLive do
        socket,
        page: "New gathering",
        page_title: "New gathering",
-       nav_items: Bonfire.Common.ExtensionModule.default_nav(:bonfire_ui_social)
+       nav_items: Bonfire.Common.ExtensionModule.default_nav()
      )}
   end
 
