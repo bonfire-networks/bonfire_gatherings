@@ -4,6 +4,7 @@ defmodule Bonfire.Gatherings.Web.HomeLive do
   declare_extension(
     "ExtensionTemplate",
     icon: "bi:app",
+    description: l("Orginisation of events"),
     default_nav: [
       Bonfire.Gatherings.Web.HomeLive,
       Bonfire.Gatherings.Web.AboutLive
