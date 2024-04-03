@@ -11,7 +11,7 @@ defmodule Bonfire.Gatherings.Web.HomeLive do
     ]
   )
 
-  declare_nav_link(l("Home"), page: "home", icon: "ri:home-line", emoji: "🧩")
+  declare_nav_link(l("Home"), page: "home", icon: "healthicons:community-meeting", emoji: "🗓️")
 
   on_mount {LivePlugs, [Bonfire.UI.Me.LivePlugs.LoadCurrentUser]}
 
