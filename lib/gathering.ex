@@ -56,7 +56,7 @@
 #     %Category{}
 #     |> Changesets.cast(attrs, @cast)
 #     |> Changeset.change(
-#       id: e(attrs, :id, nil) || Needle.ULID.generate(),
+#       id: e(attrs, :id, nil) || Needle.UID.generate(__MODULE__),
 #       is_public: true
 #     )
 #     |> common_changeset(attrs, is_local?)
