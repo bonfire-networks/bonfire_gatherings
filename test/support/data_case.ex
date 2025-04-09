@@ -23,6 +23,8 @@ defmodule Bonfire.Gatherings.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       # import Bonfire.Gatherings.DataCase
+
+      @moduletag :backend
     end
   end
 
