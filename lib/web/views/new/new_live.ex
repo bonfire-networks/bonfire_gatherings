@@ -8,8 +8,7 @@ defmodule Bonfire.Gatherings.Web.NewLive do
      assign(
        socket,
        page: "New gathering",
-       page_title: "New gathering",
-       nav_items: Bonfire.Common.ExtensionModule.default_nav()
+       page_title: "New gathering"
      )}
   end
 

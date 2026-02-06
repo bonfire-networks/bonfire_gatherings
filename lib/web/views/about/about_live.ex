@@ -14,8 +14,7 @@ defmodule Bonfire.Gatherings.Web.AboutLive do
      assign(
        socket,
        page: "About",
-       page_title: "About the extension",
-       nav_items: Bonfire.Common.ExtensionModule.default_nav(:bonfire_gatherings)
+       page_title: "About the extension"
      )}
   end
 
