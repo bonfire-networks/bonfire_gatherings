@@ -1,3 +1,4 @@
+{!-- Copied from the group form, and disabled until this extension has its own event schema and handlers: the banner sets a Classify category image, and the form submitted to the group handlers.
 <StatefulComponent
   module={maybe_component(Bonfire.Files.Web.UploadBannerLive, @__context__)}
   id={:upload_banner}
@@ -5,14 +6,15 @@
   set_field={:category}
   set_fn={&Bonfire.Classify.LiveHandler.set_image/5}
 />
-<Form
-  for={%{}}
-  as={:category}
-  id="new_gathering_form"
-  class="p-3 mt-3"
   submit="Bonfire.UI.Groups:new"
   action="Bonfire.UI.Groups:new"
   change="Bonfire.Classify:validate"
+--}
+<Form
+  for={%{}}
+  as={:gathering}
+  id="new_gathering_form"
+  class="p-3 mt-3"
   opts={autocomplete: "off"}
 >
   <div class="w-full form-control">

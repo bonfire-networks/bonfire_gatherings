@@ -1,3 +1,7 @@
 bonfire_common = "https://github.com/bonfire-networks/bonfire_common"
 bonfire_ui_common = "https://github.com/bonfire-networks/bonfire_ui_common"
 bonfire_files = "https://github.com/bonfire-networks/bonfire_files"
+bonfire_data_time = "https://github.com/bonfire-networks/bonfire_data_time"
+bonfire_geolocate = "https://github.com/bonfire-networks/bonfire_geolocate"
+bonfire_epics = "https://github.com/bonfire-networks/bonfire_epics"
+bonfire_boundaries = "https://github.com/bonfire-networks/bonfire_boundaries"

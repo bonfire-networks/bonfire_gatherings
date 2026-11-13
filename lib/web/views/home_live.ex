@@ -2,9 +2,9 @@ defmodule Bonfire.Gatherings.Web.HomeLive do
   use Bonfire.UI.Common.Web, :surface_live_view
 
   declare_extension(
-    "ExtensionTemplate",
+    "Gatherings",
     icon: "bi:app",
-    description: l("Orginisation of events"),
+    description: l("Organisation of events"),
     default_nav: [
       Bonfire.Gatherings.Web.HomeLive,
       Bonfire.Gatherings.Web.AboutLive
@@ -19,8 +19,8 @@ defmodule Bonfire.Gatherings.Web.HomeLive do
     {:ok,
      assign(
        socket,
-       page: "extension_template",
-       page_title: "ExtensionTemplate"
+       page: "gatherings",
+       page_title: "Gatherings"
      )}
   end
 

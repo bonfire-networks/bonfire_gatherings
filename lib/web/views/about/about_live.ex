@@ -3,7 +3,7 @@ defmodule Bonfire.Gatherings.Web.AboutLive do
 
   declare_nav_link(l("About"),
     page: "About",
-    href: "/bonfire_gatherings/about",
+    href: "/gatherings/about",
     icon: "typcn:info-large"
   )
 
