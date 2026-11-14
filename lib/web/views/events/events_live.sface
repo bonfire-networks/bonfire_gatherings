@@ -1,0 +1,218 @@
+<section class="bonfire-wrapper page-panel flex flex-col gap-4 p-4">
+  <div class="flex items-center justify-between gap-2">
+    <div role="tablist" class="tabs tabs-bordered self-start">
+      <LinkLive
+        to={@base_path}
+        replace
+        class={"tab", "tab-active": @time == :upcoming}
+        opts={role: "tab", "aria-selected": to_string(@time == :upcoming)}
+      >{l("Upcoming")}</LinkLive>
+      <LinkLive
+        to={@base_path <> "/past"}
+        replace
+        class={"tab", "tab-active": @time == :past}
+        opts={role: "tab", "aria-selected": to_string(@time == :past)}
+      >{l("Past")}</LinkLive>
+    </div>
+
+    <div class="flex items-center gap-1">
+      {!-- list, tiles, or the map (a page of its own, filtered as the list is, not saved), in the dropdown the group directory uses for its filters (`GroupFilterMenusLive`) --}
+      <form data-id="events_layout" phx-change="set_layout">
+        <StatelessComponent
+          module={maybe_component(Bonfire.UI.Groups.GroupFilterMenusLive, @__context__)}
+          menus={layout_menus(@event_preview, @live_action)}
+          form={layout_form(@event_preview, @live_action)}
+        />
+      </form>
+    </div>
+  </div>
+
+  {!-- the categories of the listed events (facets, as a search shows only the filters found in its results): each links to its page, which lists the events tagged with it. None on the past list for now --}
+  <div
+    :if={@category_chips.ok? and topic_chips(@category_chips.result) != []}
+    data-id="events_categories"
+    class="flex items-center gap-2 overflow-x-auto"
+    role="group"
+    aria-label={l("Filter events by category")}
+  >
+    {!-- to the same list (upcoming or past) of each category --}
+    <LinkLive
+      to={filter_path(nil, @label_ref, @time)}
+      class={
+        "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
+        "border-divider bg-primary/10 text-base-content": is_nil(@selected_category_id),
+        "border-divider bg-base-200/40 text-muted hover:bg-base-200 hover:text-base-content":
+          not is_nil(@selected_category_id)
+      }
+    >{l("All")}</LinkLive>
+
+    {!-- {#for category <- @categories}
+      <LinkLive
+        to={"/events/category/#{category_username(category)}"}
+        class={
+          "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
+          "border-divider bg-primary/10 text-base-content": @selected_category == category,
+          "border-divider bg-base-200/40 text-muted hover:bg-base-200 hover:text-base-content":
+            @selected_category != category
+        }
+      >
+        <Bonfire.Gatherings.Web.EventCategoryIconLive category={category} class="size-4" colored={false} />
+        {Bonfire.Gatherings.EventCategories.label(category)}
+      </LinkLive>
+    {/for} --}
+
+    {!-- {#for category <- topic_chips(@category_chips.result)} --}
+    {!-- the top-level ones; one with subtopics among the chips is a dropdown listing itself and them --}
+    {#for {category, subtopics} <- nested_topic_chips(@category_chips.result)}
+      {#if subtopics != []}
+        <details data-role="chip_dropdown" class="dropdown shrink-0">
+          <summary class={
+            "list-none cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
+            "border-divider bg-primary/10 text-base-content":
+              @selected_category_id in [id(category) | Enums.ids(subtopics)],
+            "border-divider bg-base-200/40 text-muted hover:bg-base-200 hover:text-base-content":
+              @selected_category_id not in [id(category) | Enums.ids(subtopics)]
+          }>
+            {#case category_of_username(e(category, :character, :username, nil))}
+              {#match nil}
+              {#match key}
+                <Bonfire.Gatherings.Web.EventCategoryIconLive category={key} class="size-4" colored={false} />
+            {/case}
+            {e(category, :profile, :name, nil) || e(category, :character, :username, nil)}
+            <#Icon iconify="ph:caret-down-bold" class="size-3" />
+          </summary>
+          <ul class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow">
+            {#for item <- [category | subtopics]}
+              <li>
+                <LinkLive to={filter_path(chip_ref(item), @label_ref, @time)}>
+                  {e(item, :profile, :name, nil) || e(item, :character, :username, nil)}
+                </LinkLive>
+              </li>
+            {/for}
+          </ul>
+        </details>
+      {#else}
+        <LinkLive
+          to={filter_path(chip_ref(category), @label_ref, @time)}
+          class={
+            "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
+            "border-divider bg-primary/10 text-base-content": @selected_category_id == id(category),
+            "border-divider bg-base-200/40 text-muted hover:bg-base-200 hover:text-base-content":
+              @selected_category_id != id(category)
+          }
+        >
+          {!-- the icon of its FEP-8a8e value, for the topics of those values --}
+          {#case category_of_username(e(category, :character, :username, nil))}
+            {#match nil}
+            {#match key}
+              <Bonfire.Gatherings.Web.EventCategoryIconLive category={key} class="size-4" colored={false} />
+          {/case}
+          {e(category, :profile, :name, nil) || e(category, :character, :username, nil)}
+        </LinkLive>
+      {/if}
+    {/for}
+  </div>
+
+  {!-- the labels of the listed events (what they are about, eg. "family friendly"), apart from the categories (what kind of event): each links to its page, as a category does --}
+  <div
+    :if={@category_chips.ok? and label_chips(@category_chips.result) != []}
+    data-id="events_labels"
+    class="flex flex-wrap items-center gap-1.5"
+    role="group"
+    aria-label={l("Filter events by label")}
+  >
+    {#for label <- label_chips(@category_chips.result)}
+      <LinkLive
+        to={filter_path(@category_ref, chip_ref(label), @time)}
+        class={
+          "badge badge-sm gap-1 transition-colors",
+          "badge-primary": @selected_label_id == id(label),
+          "badge-ghost hover:badge-outline": @selected_label_id != id(label)
+        }
+      >
+        <#Icon iconify="ph:tag-fill" class="size-3" />
+        {e(label, :profile, :name, nil) || e(label, :character, :username, nil)}
+      </LinkLive>
+    {/for}
+  </div>
+
+  {!-- the map page: the listed events' places, each popup with its name, place and link --}
+  {#if @live_action == :map}
+    <div data-id="events_map" class="h-[70vh] rounded-box overflow-hidden border border-divider">
+      <StatefulComponent
+        module={maybe_component(Bonfire.Geolocate.MapLive, @__context__)}
+        id="events_map_component"
+        markers={map_markers(@events)}
+        show_activity={false}
+      />
+    </div>
+  {#elseif @events == []}
+    <div data-id="events_empty" class="text-center text-muted py-8">
+      <p class="font-medium text-base-content">
+        {if @time == :past, do: l("No past events"), else: l("No upcoming events")}
+      </p>
+      <p class="text-sm mt-1">{l("Events from people you follow and federated platforms like Mobilizon will appear here.")}</p>
+    </div>
+  {#else}
+    {!-- a heading per day (sticky, so the day stays in sight while scrolling through it), the cards under it showing only their times --}
+    {#for {day, day_events} <- by_day(@events)}
+      <h3
+        data-role="events_day"
+        class="sticky top-0 z-10 -mx-4 px-4 py-2 bg-base-100/95 backdrop-blur text-sm font-semibold text-base-content border-b border-divider"
+      >{day}</h3>
+      {#if tiles?(@event_preview)}
+        {!-- as tiles in a grid (`EventTileLive`, which a feed can use too, as its `custom_preview`) --}
+        <div
+          data-id="events_grid"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        >
+          {#for event <- day_events}
+            <StatelessComponent
+              module={@event_preview}
+              object={event}
+              date_in_heading
+              exclude_category_id={@selected_category_id}
+            />
+          {/for}
+        </div>
+      {#else}
+        {#for event <- day_events}
+          {!-- <EventLive object={event} parent_id={"events_page_#{id(event)}"} showing_within={:events} /> --}
+          {!-- its primary image as the cover and the rest listed, as in feeds (`Bonfire.UI.Social.ActivityLive`) --}
+          {#case Bonfire.Files.split_primary_image(e(event, :files, nil))}
+            {#match {primary_image, media}}
+              {!-- <EventLive
+              object={event}
+              primary_image={primary_image}
+              parent_id={"events_page_#{id(event)}"}
+              showing_within={:events}
+              date_in_heading
+              exclude_category_id={@selected_category_id}
+            /> --}
+              {!-- a row: a square cover, its text beside it --}
+              <StatelessComponent
+                module={@event_preview}
+                object={event}
+                primary_image={primary_image}
+                date_in_heading
+                exclude_category_id={@selected_category_id}
+              />
+              <StatelessComponent
+                :if={media != []}
+                module={maybe_component(Bonfire.UI.Social.Activity.MediaLive, @__context__)}
+                media={media}
+                parent_id={"events_page_media_#{id(event)}"}
+                showing_within={:events}
+              />
+          {/case}
+        {/for}
+      {/if}
+    {/for}
+
+    {#if e(@page_info, :end_cursor, nil)}
+      <button type="button" phx-click="load_more" class="btn btn-ghost btn-sm self-center">
+        {l("Load more")}
+      </button>
+    {/if}
+  {/if}
+</section>

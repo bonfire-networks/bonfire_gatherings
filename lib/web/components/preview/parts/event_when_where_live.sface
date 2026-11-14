@@ -1,0 +1,29 @@
+{#case @show_time && EventLive.starts(@object)}
+  {#match false}
+  {#match nil}
+  {#match start}
+    <div data-role="event_time" class="flex items-start gap-2 mt-3">
+      <#Icon iconify="ph:calendar-blank-bold" class="size-4 mt-0.5 shrink-0 text-muted" />
+      <time datetime={start.iso} class="text-sm text-base-content leading-snug">
+        {#if @time_only}
+          {DatesTimes.format_time_range(start, EventLive.ends(@object)) || l("All day")}
+        {#else}
+          {DatesTimes.format_range(start, EventLive.ends(@object))}
+        {/if}
+      </time>
+    </div>
+{/case}
+
+{#case EventLive.place(@object)}
+  {#match nil}
+  {#match place}
+    <div data-role="event_place" class="flex items-start gap-2 mt-2">
+      <#Icon iconify="ph:map-pin-fill" class="size-4 mt-0.5 shrink-0 text-muted" />
+      <a
+        href={"https://www.openstreetmap.org/search?zoom=6&query=#{place}"}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sm text-base-content hover:text-primary hover:underline transition-colors"
+      >{place}</a>
+    </div>
+{/case}

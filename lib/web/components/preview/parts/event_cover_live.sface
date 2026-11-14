@@ -1,0 +1,90 @@
+<div class="relative">
+  {#case Bonfire.Common.Media.media_url(@primary_image)}
+    {#match nil}
+      <div
+        class={["flex items-center justify-center bg-base-200 border-b border-divider", @placeholder_class]}
+        aria-hidden="true"
+      >
+        <#Icon iconify="ph:calendar-blank-bold" class="size-10 text-base-content/10" />
+      </div>
+    {#match url}
+      {!-- its primary image as the cover, as an article's --}
+      <div
+        data-id="event_cover"
+        role="img"
+        aria-label={Bonfire.Files.Media.media_alt(@primary_image)}
+        class={[
+          "w-full bg-center bg-no-repeat bg-cover border-b border-divider bg-placeholder",
+          @cover_class
+        ]}
+        style={"background-image: url('#{url}')"}
+      >
+        <span class="sr-only">{Bonfire.Files.Media.media_alt(@primary_image)}</span>
+      </div>
+  {/case}
+
+  {!-- its categories and labels when they are loaded (less the one the page is filtered by), else "Event" --}
+  <div
+    :if={@show_badge}
+    class="absolute top-3 right-3 flex flex-wrap justify-end gap-1 max-w-[70%]"
+  >
+    {#case badge_names(@object, @exclude_category_id)}
+      {#match []}
+        <span data-role="event_badge" class="badge badge-neutral gap-1.5 font-medium shadow-sm">
+          <#Icon iconify="ph:calendar-blank-bold" class="size-3.5" />
+          {l("Event")}
+        </span>
+      {#match names}
+        {#for name <- names}
+          <p data-role="event_badge" class="badge badge-neutral font-medium shadow-sm">{name}</p>
+        {/for}
+    {/case}
+  </div>
+
+  {!-- under a heading that gives the day, the time in the date chip's place --}
+  {#case not @show_date_chip && Bonfire.Gatherings.Web.Preview.EventLive.starts(@object)}
+    {#match start}
+      {#if start}
+        <time
+          data-role="event_time"
+          datetime={start.iso}
+          class={[
+            "absolute flex flex-col gap-0.5 leading-none rounded-box bg-base-100 ring-1 ring-base-content/10 shadow-md px-3 py-2 text-sm font-semibold text-base-content",
+            @chip_position_class
+          ]}
+        >
+          {!-- the times, and the time zone on a line of its own --}
+          {#case DatesTimes.format_time_range(
+              start,
+              Bonfire.Gatherings.Web.Preview.EventLive.ends(@object),
+              with_offset: false
+            )}
+            {#match nil}
+              <span>{l("All day")}</span>
+            {#match times}
+              <p>{times}</p>
+              <p class="text-xs font-normal text-muted">{DatesTimes.offset_label(start)}</p>
+          {/case}
+        </time>
+      {/if}
+  {/case}
+
+  {#case @show_date_chip && DatesTimes.chip_parts(Bonfire.Gatherings.Web.Preview.EventLive.starts(@object))}
+    {#match false}
+    {#match nil}
+    {#match c}
+      <div
+        data-role="event_date_chip"
+        class={[
+          "absolute flex flex-col items-center justify-center leading-none rounded-box bg-base-100 ring-1 ring-base-content/10 shadow-md px-3 py-1.5 min-w-12",
+          @chip_position_class
+        ]}
+      >
+        <span class="type-overline text-primary">{c.weekday}</span>
+        <span class="type-title text-base-content">{c.day}</span>
+        <span class="type-overline text-muted">{c.month}</span>
+      </div>
+  {/case}
+
+  <#slot />
+</div>

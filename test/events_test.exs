@@ -108,6 +108,35 @@ defmodule Bonfire.Gatherings.EventsTest do
     refute started_no_end.id in seen
   end
 
+  test "past lists events that have ended, most recent first" do
+    user = fake_user!()
+    now = DateTime.utc_now()
+    at = fn hours -> DateTime.add(now, hours * 3600, :second) end
+
+    span = fn name, b, e ->
+      create!(
+        user,
+        event_attrs(%{post_content: %{name: name}, time_span: %{has_beginning: b, has_end: e}})
+      )
+    end
+
+    last_week = span.("last week", at.(-170), at.(-168))
+    yesterday = span.("yesterday", at.(-26), at.(-24))
+    started_no_end = span.("started yesterday, no end", at.(-24), nil)
+    ongoing = span.("ongoing", at.(-1), at.(1))
+    tomorrow = span.("tomorrow", at.(24), at.(26))
+
+    ids = fn %{edges: edges} -> Enum.map(edges, &(Bonfire.Common.Enums.id(&1) || &1.id)) end
+
+    # pages hold 2 in tests, so the second page also checks the cursor
+    assert %{page_info: %{end_cursor: cursor}} = page_1 = Events.list_past(current_user: user)
+    assert ids.(page_1) == [started_no_end.id, yesterday.id]
+    assert ids.(Events.list_past(current_user: user, after: cursor)) == [last_week.id]
+
+    refute ongoing.id in ids.(page_1)
+    refute tomorrow.id in ids.(page_1)
+  end
+
   test "creating an event publishes an activity by its creator, and starts a thread" do
     user = fake_user!()
     event = create!(user)
@@ -139,5 +168,72 @@ defmodule Bonfire.Gatherings.EventsTest do
                event_attrs: event_attrs(%{time_span: %{has_beginning: nil}}),
                boundary: "public"
              )
+  end
+
+  test "the category facets keep their limit for topics and for labels apart" do
+    user = fake_user!()
+    topic = Bonfire.Classify.Simulate.fake_category!(user, nil, %{type: :topic, name: "Gigs"})
+
+    {:ok, label} =
+      Bonfire.Classify.Categories.get_or_create_topic(
+        %{
+          name: "Outdoors",
+          username: "outdoors_#{System.unique_integer([:positive])}",
+          type: :label
+        },
+        user
+      )
+
+    create!(user, event_attrs(%{tags: [topic, label]}))
+
+    ids = Events.category_facets_without_cache(:upcoming, 1)
+    assert topic.id in ids
+    assert label.id in ids
+  end
+
+  test "the usernames of the FEP-8a8e category topics and their parent are reserved, as archived topics, until an event uses them" do
+    # idempotent: the fixtures migration has already run it
+    # Bonfire.Gatherings.EventCategories.reserve_topics()
+    # a startup task, run off the boot path on every boot (so a run that was interrupted is tried again), cheap to skip once done
+    assert Bonfire.Gatherings.EventCategories in Bonfire.Common.StartupTasks.tasks()
+    Bonfire.Gatherings.EventCategories.run()
+
+    assert {:error, _} =
+             Bonfire.Classify.Categories.get("music_events", skip_boundary_check: true)
+
+    assert {:ok, %{id: _music_id}} = Bonfire.Classify.Categories.get_archived("music_events")
+    assert {:ok, %{id: _parent_id}} = Bonfire.Classify.Categories.get_archived("events")
+
+    # under the parent, as the tree survives archiving
+    # (it does not: the tree's `parent_id` is a strong pointer to the parent's `category` row, which archiving deletes, so the children's tree rows go with it; they are reserved without a parent, and put under it when an event brings one back)
+    # assert %{tree: %{parent_id: ^parent_id}} =
+    #          Repo.preload(%Bonfire.Classify.Category{id: music_id}, :tree)
+
+    # nobody else can take the name
+    group = Bonfire.Classify.Simulate.fake_group!(fake_user!(), %{username: "music_events"})
+    refute Repo.preload(group, :character).character.username == "music_events"
+  end
+
+  test "the Events feed and the Events filter (\"Event\") list native events, and not posts" do
+    user = fake_user!()
+    event = create!(user)
+
+    {:ok, post} =
+      Bonfire.Posts.publish(
+        current_user: user,
+        post_attrs: %{post_content: %{html_body: "<p>Not an event</p>"}},
+        boundary: "public"
+      )
+
+    # the `events` preset, as `/feed/events` loads it
+    assert Bonfire.Social.FeedLoader.feed_contains?(:events, event, current_user: user)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:events, post, current_user: user)
+
+    # the "Events" tab of the feed filters
+    filtered =
+      Bonfire.Social.FeedLoader.feed(:custom, %{object_types: ["Event"]}, current_user: user)
+
+    assert Bonfire.Social.FeedLoader.feed_contains?(filtered, event, current_user: user)
+    refute Bonfire.Social.FeedLoader.feed_contains?(filtered, post, current_user: user)
   end
 end

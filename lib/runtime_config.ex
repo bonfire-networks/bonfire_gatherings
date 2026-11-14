@@ -18,8 +18,19 @@ defmodule Bonfire.Gatherings.RuntimeConfig do
     # config :bonfire_gatherings,
     #   modularity: :disabled
 
-    # Event-creation epic, in the same parallel stages as the `Bonfire.Poll.Questions` and `Bonfire.Posts` ones, so `SetBoundaries` runs after `Tag`. No `Federate` step yet: events made here stay local until their ActivityPub mapping is decided.
+    # reserves the usernames of the event category topics, off the boot path, on every boot until done (`Bonfire.Gatherings.EventCategories.run/0`)
+    config :bonfire_common, Bonfire.Common.StartupTasks,
+      run: [reserve_event_category_topics: Bonfire.Gatherings.EventCategories]
+
+    config :bonfire, :ui,
+      object_preview: [
+        {Bonfire.Gatherings.Event, Bonfire.Gatherings.Web.Preview.EventLive}
+      ]
+
+    # Event-creation epic, in the same parallel stages as the `Bonfire.Poll.Questions` and `Bonfire.Posts` ones, so `SetBoundaries` runs after `Tag`.
     config :bonfire_gatherings, Bonfire.Gatherings.Events,
+      # the username of a topic that the topics made for event categories (eg. `music_events`) go under, made the first time an event makes one of them; none if set to a blank string 
+      categories_parent: System.get_env("EVENT_CATEGORIES_PARENT", "events"),
       epics: [
         create: [
           {Bonfire.Gatherings.Event.Create, @event_act_opts},
@@ -44,8 +55,9 @@ defmodule Bonfire.Gatherings.RuntimeConfig do
           EctoActs.Work,
           EctoActs.Commit,
           [
-            {Bonfire.Search.Acts.Queue, @event_act_opts}
-            # {Bonfire.Social.Acts.Federate, @event_act_opts}
+            {Bonfire.Search.Acts.Queue, @event_act_opts},
+            # ties an incoming AP object to the event, and over C2S sends the client's own document; events made here are not sent yet, as there is no `Events.ap_publish_activity`
+            {Bonfire.Social.Acts.Federate, @event_act_opts}
           ],
           {Bonfire.Tags.Acts.AutoBoost, @event_act_opts}
         ]

@@ -11,6 +11,29 @@ defmodule Bonfire.Gatherings.Web.Routes do
         live("/about", AboutLive)
       end
 
+      # upcoming events, and those tagged with a topic (named by its username, or its id if it has no character); moved from `bonfire_ui_social`
+      scope "/", Bonfire.Gatherings.Web do
+        pipe_through(:browser)
+
+        live("/events", EventsLive, as: :events)
+        live("/events/past", EventsLive, :past, as: :events)
+        live("/events/category/:category_ref", EventsLive, as: :events)
+        live("/events/category/:category_ref/past", EventsLive, :past, as: :events)
+        # the upcoming events on a map, filtered as the list is
+        live("/events/map", EventsLive, :map, as: :events)
+        live("/events/category/:category_ref/map", EventsLive, :map, as: :events)
+        live("/events/label/:label_ref/map", EventsLive, :map, as: :events)
+        live("/events/category/:category_ref/label/:label_ref/map", EventsLive, :map, as: :events)
+        # by a label (what events are about), alone or with a category
+        live("/events/label/:label_ref", EventsLive, as: :events)
+        live("/events/label/:label_ref/past", EventsLive, :past, as: :events)
+        live("/events/category/:category_ref/label/:label_ref", EventsLive, as: :events)
+
+        live("/events/category/:category_ref/label/:label_ref/past", EventsLive, :past,
+          as: :events
+        )
+      end
+
       # pages only guests can view
       scope "/gatherings/", Bonfire.Gatherings.Web do
         pipe_through(:browser)

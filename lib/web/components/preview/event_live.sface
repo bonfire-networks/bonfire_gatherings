@@ -1,0 +1,58 @@
+{#if @showing_within in [:smart_input, :pinned]}
+  <div data-id="event_preview">
+    <div class="flex badge badge-neutral items-center gap-2 font-medium">
+      <#Icon iconify="ph:calendar-blank-bold" class="size-4" />
+      {l("Event")}
+    </div>
+    <h2 class="mt-2 font-medium text-base-content">
+      {name(@object) || l("Untitled event")}
+    </h2>
+  </div>
+{#else}
+  {!-- the cover, badge and date chip, and the when and where, are parts shared with the tile (`EventTileLive`) --}
+  <div
+    data-id="event_preview"
+    data-layout="list"
+    class="rounded-box border border-divider bg-base-100 overflow-hidden"
+  >
+    <Bonfire.Gatherings.Web.Preview.EventCoverLive
+      object={@object}
+      primary_image={@primary_image}
+      show_date_chip={not @date_in_heading}
+      exclude_category_id={@exclude_category_id}
+    />
+
+    <div class="p-4">
+      <LinkLive to={@permalink || path(@object)}>
+        <h2 class={
+          "font-medium text-base-content text-balance leading-snug hover:underline",
+          "text-xl": @viewing_main_object,
+          "text-lg": !@viewing_main_object
+        }>
+          {name(@object) || l("Untitled event")}
+        </h2>
+      </LinkLive>
+
+      <Bonfire.Gatherings.Web.Preview.EventWhenWhereLive
+        object={@object}
+        time_only={@date_in_heading}
+      />
+
+      {#case summary(@object)}
+        {#match nil}
+        {#match ""}
+        {#match text}
+          {!-- truncated in feeds and expandable, as a post's content is --}
+          <div class="mt-4">
+            <Bonfire.UI.Common.TruncatableContentLive
+              html_body={text}
+              parent_id={deterministic_dom_id(__MODULE__, nil, nil, @parent_id)}
+              showing_within={@showing_within}
+              viewing_main_object={@viewing_main_object}
+              activity_inception={@activity_inception}
+            />
+          </div>
+      {/case}
+    </div>
+  </div>
+{/if}

@@ -39,9 +39,16 @@ defmodule Bonfire.Gatherings.Event.Create do
         maybe_debug(epic, act, attrs_key, "Assigning changeset to :#{as} using attrs")
 
         Events.base_changeset(attrs)
+        |> maybe_put_id(attrs[:id])
         |> Map.put(:action, :insert)
         |> Epic.assign(epic, as, ...)
         |> Work.add(:event)
     end
   end
+
+  # an id already reserved for the event (eg. by the AP object it was posted as), else one is generated
+  defp maybe_put_id(changeset, id) when is_binary(id),
+    do: Ecto.Changeset.put_change(changeset, :id, id)
+
+  defp maybe_put_id(changeset, _), do: changeset
 end

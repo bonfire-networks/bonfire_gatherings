@@ -12,12 +12,21 @@ defmodule Bonfire.Gatherings.Events do
   def schema_module, do: Event
   def query_module, do: __MODULE__
 
+  # incoming only for now: events are not yet sent out by this module (no `ap_publish_activity`), except a C2S event, whose own document the epic's Federate act sends
+  @behaviour Bonfire.Federate.ActivityPub.FederationModules
+  def federation_module, do: ["Event", {"Create", "Event"}, {"Update", "Event"}]
+
   @doc """
   Creates an event by running the `:create` epic configured in `Bonfire.Gatherings.RuntimeConfig`.
 
   Options: `current_user`, `event_attrs` (`post_content`, `time_span`, optionally `primary_geolocation`), `boundary`.
   """
   def create(options \\ []) do
+    # run_epic(:create, options)
+    # an event made here (not from an AP object, as C2S or an incoming one is) stays local until its ActivityPub mapping exists: the Federate act would ask this module for an `ap_publish_activity`, which it does not have yet
+    options =
+      if options[:ap_object], do: options, else: Keyword.put_new(options, :skip_federation, true)
+
     run_epic(:create, options)
   end
 
@@ -53,21 +62,179 @@ defmodule Bonfire.Gatherings.Events do
 
   The time span is inner-joined (every event has one), so the order can use the index on `has_beginning`.
   """
-  def list_upcoming(opts \\ []) do
+  def list_upcoming(opts \\ []), do: list_by_time(:upcoming, opts)
+
+  @doc "Lists the events the viewer may see that have ended (the opposite of `list_upcoming/1`: an end passed, or with no end a start passed), most recent start first, a page at a time."
+  def list_past(opts \\ []), do: list_by_time(:past, opts)
+
+  # the two differ only in which side of now, and in which direction the start date is walked (the same index either way)
+  defp list_by_time(time, opts) do
     opts = to_options(opts)
-    now = DateTime.utc_now()
+    dir = if time == :upcoming, do: :asc, else: :desc
 
     query_base()
     |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :time_span)
-    |> where(
-      [time_span: ts],
-      ts.has_end >= ^now or (is_nil(ts.has_end) and ts.has_beginning >= ^now)
-    )
-    |> order_by([time_span: ts, main_object: e], asc: ts.has_beginning, asc: e.id)
+    |> where_time(time, DateTime.utc_now())
+    |> maybe_tagged_with(opts[:tags])
+    |> order_by([time_span: ts, main_object: e], [{^dir, ts.has_beginning}, {^dir, e.id}])
     |> Objects.list_paginated(
-      Keyword.put(opts, :cursor_fields, [{{:time_span, :has_beginning}, :asc}, {:id, :asc}])
+      Keyword.put(opts, :cursor_fields, [{{:time_span, :has_beginning}, dir}, {:id, dir}])
     )
   end
+
+  defp where_time(query, :upcoming, now),
+    do:
+      where(
+        query,
+        [time_span: ts],
+        ts.has_end >= ^now or (is_nil(ts.has_end) and ts.has_beginning >= ^now)
+      )
+
+  defp where_time(query, :past, now),
+    do:
+      where(
+        query,
+        [time_span: ts],
+        ts.has_end < ^now or (is_nil(ts.has_end) and ts.has_beginning < ^now)
+      )
+
+  @doc """
+  The ids of the categories (topics, groups, labels; not hashtags) that tag the events of a list (`:upcoming` for now), most used first, at most `limit`: the facets of that list, as a search shows only the filters found in its results.
+
+  Counted over every event of the list with no boundary check, and cached instance-wide (`cache: :reset` or `:refresh` to recompute), so a page filters them for its viewer (they may not see every category).
+  """
+  def category_facets(time \\ :upcoming, opts \\ []) do
+    Bonfire.Common.Cache.maybe_apply_cached(
+      &category_facets_without_cache/2,
+      [time, opts[:limit] || 20],
+      Keyword.merge(
+        [
+          cache_key: "Bonfire.Gatherings.Events.category_facets:#{time}",
+          # expire:
+          #   Bonfire.Common.Config.get(
+          #     [__MODULE__, :category_facets_expire],
+          #     to_timeout(minute: 5),
+          #     name: l("Event category filters"),
+          #     description: l("How long the categories offered as filters on the events page are kept before being counted again.")
+          #   )
+          expire: category_facets_expire(time)
+        ],
+        Keyword.take(opts, [:cache])
+      )
+    )
+  end
+
+  # the past changes slowly, so its categories are counted again less often
+  defp category_facets_expire(:past),
+    do:
+      Bonfire.Common.Config.get(
+        [__MODULE__, :category_facets_past_expire],
+        to_timeout(hour: 1),
+        name: l("Past event category filters"),
+        description:
+          l(
+            "How long the categories offered as filters on the past events page are kept before being counted again."
+          )
+      )
+
+  defp category_facets_expire(_upcoming),
+    do:
+      Bonfire.Common.Config.get(
+        [__MODULE__, :category_facets_expire],
+        to_timeout(minute: 5),
+        name: l("Event category filters"),
+        description:
+          l(
+            "How long the categories offered as filters on the events page are kept before being counted again."
+          )
+      )
+
+  @doc false
+  def category_facets_without_cache(time, limit) do
+    category_table = Bonfire.Common.Types.table_id(Bonfire.Classify.Category)
+
+    from(main_object in Event, as: :main_object)
+    |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :time_span)
+    |> where_time(time, DateTime.utc_now())
+    |> join(:inner, [main_object: e], t in Bonfire.Tag.Tagged, on: t.id == e.id, as: :tagged)
+    |> join(:inner, [tagged: t], p in Needle.Pointer,
+      on: p.id == t.tag_id and p.table_id == ^category_table and is_nil(p.deleted_at),
+      as: :tag
+    )
+    # |> group_by([tagged: t], t.tag_id)
+    # |> order_by([tagged: t], desc: count(t.id), asc: t.tag_id)
+    # |> limit(^limit)
+    # |> select([tagged: t], t.tag_id)
+    # |> repo().all()
+    # `limit` of each type (labels apart from topics and groups, as they are shown apart), ranked in the same query
+    # |> join(:inner, [tagged: t], c in Bonfire.Classify.Category, on: c.id == t.tag_id, as: :category)
+    # |> group_by([tagged: t, category: c], [t.tag_id, c.type])
+    # |> select([tagged: t, category: c], %{
+    #   id: t.tag_id,
+    #   uses: count(t.id),
+    #   rank:
+    #     over(row_number(),
+    #       partition_by: fragment("? = 3", c.type),
+    #       order_by: [desc: count(t.id), asc: t.tag_id]
+    #     )
+    # })
+    # each tagged category and its ancestors (its tree `path`), so a parent counts the events of its subtopics, each event once
+    |> join(:left, [tagged: t], tr in Bonfire.Classify.Tree, on: tr.id == t.tag_id, as: :tree)
+    |> join(
+      :inner_lateral,
+      [tagged: t, tree: tr],
+      a in fragment(
+        "SELECT unnest(array_append(coalesce(?, ARRAY[]::uuid[]), ?)) AS id",
+        tr.path,
+        t.tag_id
+      ),
+      on: true,
+      as: :counted
+    )
+    |> join(:inner, [counted: a], c in Bonfire.Classify.Category, on: c.id == a.id, as: :category)
+    # by the category's own id, typed by its schema (`type(…, Needle.UID)` is not a query type)
+    |> group_by([category: c], [c.id, c.type])
+    |> select([main_object: e, category: c], %{
+      id: c.id,
+      uses: count(e.id, :distinct),
+      rank:
+        over(row_number(),
+          partition_by: fragment("? = 3", c.type),
+          order_by: [desc: count(e.id, :distinct), asc: c.id]
+        )
+    })
+    |> subquery()
+    |> where([f], f.rank <= ^limit)
+    |> order_by([f], desc: f.uses, asc: f.id)
+    |> select([f], f.id)
+    |> repo().all()
+  end
+
+  # only the events tagged with one of `tags` (ids or tags, eg. a topic): an `exists` on the tagged rows, so an event with several of them is listed once
+  # groups of tags (eg. a category with its subtopics, and a label): tagged with one of each group
+  defp maybe_tagged_with(query, [first | _] = groups) when is_list(first),
+    do: Enum.reduce(groups, query, &maybe_tagged_with(&2, &1))
+
+  defp maybe_tagged_with(query, tags) when is_list(tags) and tags != [] do
+    # as UUIDs, the table's column type (a table source has no schema to cast them)
+    tag_uuids =
+      for id <- Enums.ids(tags), {:ok, bin} = Needle.UID.dump(id), do: Ecto.UUID.cast!(bin)
+
+    where(
+      query,
+      [],
+      exists(
+        from(t in "bonfire_tagged",
+          where:
+            t.id == parent_as(:main_object).id and
+              t.tag_id in type(^tag_uuids, {:array, Ecto.UUID}),
+          select: 1
+        )
+      )
+    )
+  end
+
+  defp maybe_tagged_with(query, _), do: query
 
   @doc "The query behind `list_paginated/2`."
   def query_paginated(filters, opts \\ [])
@@ -88,5 +255,426 @@ defmodule Bonfire.Gatherings.Events do
   defp query_base do
     from(main_object in Event, as: :main_object)
     |> proload([:post_content])
+  end
+
+  @doc """
+  Updates an event's name, summary and body, its time span, its place, and its hashtags and categories.
+
+  `attrs` as for `create/1`'s `event_attrs`, plus `hashtags` (a map, as `Bonfire.Tag.ap_receive_hashtags/1` gives) and `tags`.
+  """
+  def update(creator, %Event{} = event, attrs) do
+    # `tags` too: `Bonfire.Tag.maybe_update_tags/3` compares the new tags with these to know which to remove
+    event = repo().preload(event, [:post_content, :time_span, :tags])
+
+    repo().transact_with(fn ->
+      with {:ok, _} <- update_post_content(event, attrs[:post_content]),
+           {:ok, _} <- update_time_span(event, attrs[:time_span]),
+           {:ok, _} <- update_place(event, attrs[:primary_geolocation]),
+           {:ok, event} <-
+             Bonfire.Tag.maybe_update_tags(creator, event, Map.take(attrs, [:hashtags, :tags])) do
+        {:ok, event}
+      end
+    end)
+  end
+
+  defp update_post_content(_event, nil), do: {:ok, nil}
+
+  defp update_post_content(%{post_content: %{} = content}, attrs),
+    do: content |> Bonfire.Data.Social.PostContent.changeset(attrs) |> repo().update()
+
+  defp update_post_content(event, attrs),
+    # built at runtime: `bonfire_data_social` is not one of this extension's dependencies, so its struct cannot be expanded when this compiles
+    do:
+      struct(Bonfire.Data.Social.PostContent, id: event.id)
+      |> Bonfire.Data.Social.PostContent.changeset(attrs)
+      |> repo().insert()
+
+  defp update_time_span(_event, nil), do: {:ok, nil}
+
+  defp update_time_span(%{time_span: %{} = span}, attrs),
+    do: span |> Bonfire.Data.Time.TimeSpan.changeset(attrs) |> repo().update()
+
+  defp update_time_span(event, attrs),
+    do:
+      %Bonfire.Data.Time.TimeSpan{id: event.id}
+      |> Bonfire.Data.Time.TimeSpan.changeset(attrs)
+      |> repo().insert()
+
+  # a place no longer named is removed; the geolocation itself stays
+  defp update_place(event, %{geolocation_id: geolocation_id}),
+    do: Bonfire.Geolocate.PrimaryGeolocations.set(event, geolocation_id)
+
+  defp update_place(event, _), do: Bonfire.Geolocate.PrimaryGeolocations.remove(event)
+
+  ## incoming ActivityPub
+
+  def ap_receive_activity(creator, activity, object, extra_opts \\ [])
+
+  # the `ActivityPub.Object` is carried in `extra_opts`, so the Federate act can tie it to the event (and over C2S, send it)
+  def ap_receive_activity(creator, activity, %{data: %{} = data} = ap_object, extra_opts),
+    do:
+      ap_receive_activity(
+        creator,
+        activity,
+        data,
+        Keyword.put_new(extra_opts, :ap_object, ap_object)
+      )
+
+  # a bare `Event` with no `Create` wrapper: the activity is the object
+  def ap_receive_activity(
+        creator,
+        %{data: %{"type" => "Event"} = data} = activity,
+        nil,
+        extra_opts
+      ),
+      do:
+        ap_receive_activity(
+          creator,
+          activity,
+          data,
+          Keyword.put_new(extra_opts, :ap_object, activity)
+        )
+
+  def ap_receive_activity(creator, activity, %{"id" => ap_id} = data, extra_opts) do
+    opts = ap_receive_opts(creator, activity, data, extra_opts)
+
+    case {e(activity, :data, "type", nil), existing_event(ap_id)} do
+      {"Update", %Event{} = event} ->
+        # qualified, as a bare `update/3` is `Ecto.Query.update/3`, imported by `use Bonfire.Common.Repo`
+        __MODULE__.update(creator, event, opts[:event_attrs])
+
+      _ ->
+        with {:ok, event} <- create(opts) do
+          # into the feeds of the categories it was tagged with, as far as the creator may `:tag` them (as `Bonfire.Social.APActivities` did for events)
+          Bonfire.Common.Utils.maybe_apply(
+            Bonfire.Tag,
+            :maybe_boost_tagged,
+            [creator, event, [ap_object: opts[:ap_object]]],
+            fallback_return: nil
+          )
+
+          # into the feeds of the topics of its FEP-8a8e categories, whoever posted it: the value is the poster's own claim, as a hashtag is, so no `:tag` permission is asked. Only a local event's boost is sent out to the topic's followers elsewhere
+          if opts[:category_mirrors] not in [nil, []],
+            do:
+              Bonfire.Common.Utils.maybe_apply(
+                Bonfire.Social.Tags,
+                :auto_boost,
+                [
+                  opts[:category_mirrors],
+                  event,
+                  [skip_federation: not Bonfire.Social.is_local?(creator)]
+                ],
+                fallback_return: nil
+              )
+
+          {:ok, event}
+        end
+    end
+  end
+
+  defp existing_event(ap_id) do
+    with {:ok, %{pointer_id: id}} when is_binary(id) <-
+           ActivityPub.Object.get_cached(ap_id: ap_id) do
+      repo().get(Event, id)
+    else
+      _ -> nil
+    end
+  end
+
+  defp ap_receive_opts(creator, activity, data, extra_opts) do
+    activity_data = e(activity, :data, nil) || %{}
+    adapter = Bonfire.Federate.ActivityPub.AdapterUtils
+
+    is_public? = adapter.is_public?(activity, extra_opts[:ap_object] || activity)
+    direct_recipients = adapter.all_known_recipient_characters(activity_data, data)
+
+    {boundary, to_circles} =
+      adapter.recipients_boundary_circles(
+        direct_recipients,
+        activity,
+        is_public?,
+        data["interactionPolicy"]
+      )
+
+    # the mirrors of its FEP-8a8e categories, tagged and then boosted into
+    # category_mirrors = fep_8a8e_categories(data, creator)
+    # with the topics of the values its `Category` tags are named after (eg. Lauti's "Music"), which then make no topic of their own
+    {named_keys, other_tags} = split_value_named_tags(data["tag"], creator)
+
+    category_mirrors =
+      fep_8a8e_categories(data, creator, named_keys)
+
+    [
+      current_user: creator,
+      boundary: boundary,
+      to_circles: to_circles,
+      category_mirrors: category_mirrors,
+      event_attrs:
+        ap_event_attrs(
+          creator,
+          activity_data,
+          Map.put(data, "tag", other_tags),
+          direct_recipients,
+          category_mirrors
+        )
+        # the id the AP object may already have reserved (a C2S object's id URL carries it), as `Bonfire.Posts` does: `Outgoing` then recognises the object as the event, and over C2S sends the client's own Create instead of asking this module to build one
+        |> Enums.maybe_put(:id, e(extra_opts[:ap_object], :pointer_id, nil))
+    ]
+    |> Keyword.merge(Keyword.take(extra_opts, [:publish_in, :ap_object]))
+  end
+
+  # the AS2 / FEP-8a8e fields the event models; the rest stay readable in its cached AP document
+  defp ap_event_attrs(creator, activity_data, data, direct_recipients, category_mirrors) do
+    attrs =
+      Bonfire.Social.PostContents.ap_receive_attrs_prepare(
+        creator,
+        activity_data,
+        data,
+        direct_recipients
+      )
+
+    attrs
+    |> Map.merge(%{
+      time_span: %{
+        has_beginning: Bonfire.Common.DatesTimes.to_date_time(data["startTime"]),
+        has_end: Bonfire.Common.DatesTimes.to_date_time(data["endTime"]),
+        # an unknown zone is dropped rather than refusing the event
+        timezone: known_timezone(data["timezone"])
+      },
+      # tags: List.wrap(attrs[:tags]) ++ ap_category_tags(data["tag"], creator),
+      tags:
+        List.wrap(attrs[:tags]) ++
+          ap_category_tags(data["tag"], creator) ++ category_mirrors,
+      uploaded_media:
+        Bonfire.Files.ap_receive_attachments(creator, attrs[:primary_image], attrs[:attachments])
+    })
+    # |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"]))
+    |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"], creator))
+  end
+
+  defp known_timezone(zone) when is_binary(zone),
+    do: if(Tzdata.zone_exists?(zone), do: zone)
+
+  defp known_timezone(_), do: nil
+
+  # the Geolocation the nested ingest made of the event's `Place` (Geolocate declares "Place"); an id-less Place has none
+  defp ap_place([first | _]), do: ap_place(first)
+  defp ap_place(%{"id" => id}), do: ap_place(id)
+
+  defp ap_place(id) when is_binary(id) do
+    with {:ok, %{pointer_id: pointer_id}} when is_binary(pointer_id) <-
+           ActivityPub.Object.get_cached(ap_id: id) do
+      %{geolocation_id: pointer_id}
+    else
+      _ -> nil
+    end
+  end
+
+  defp ap_place(_), do: nil
+
+  # the Place of the nested ingest (one with an `id`), else one with no `id`, as a C2S client sends it (eg. Lauti), made a Geolocation here (Geolocate's own reading of a Place: name, summary, latitude and longitude)
+  defp ap_place(location, creator) do
+    ap_place(location) || ap_place_without_id(List.wrap(location) |> List.first(), creator)
+  end
+
+  defp ap_place_without_id(%{"type" => "Place"} = place, creator)
+       when not is_map_key(place, "id") do
+    if place["name"] || (place["latitude"] && place["longitude"]) do
+      case Bonfire.Common.Utils.maybe_apply(
+             Bonfire.Geolocate.Geolocations,
+             :ap_receive_activity,
+             [creator, nil, %{data: place}],
+             fallback_return: nil
+           ) do
+        {:ok, %{id: geolocation_id}} -> %{geolocation_id: geolocation_id}
+        _ -> nil
+      end
+    end
+  end
+
+  defp ap_place_without_id(_, _), do: nil
+
+  # the event's FEP-8a8e `category` values (known ones only) become tags of the local mirrors of those categories, whoever posted it
+  # the values that a local poster's `Category` tags (event types or no scheme; a `…#Topic` one is a label's business) are named after, and the tags left for `ap_category_tags/2`
+  defp split_value_named_tags(tags, creator) do
+    tags = List.wrap(tags)
+
+    if Bonfire.Social.is_local?(creator) do
+      Enum.reduce(tags, {[], []}, fn
+        %{"type" => "Category", "name" => name} = item, {keys, rest} ->
+          case not topic_scheme?(item) && Bonfire.Gatherings.EventCategories.key_for_name(name) do
+            key when is_binary(key) -> {[key | keys], rest}
+            _ -> {keys, [item | rest]}
+          end
+
+        item, {keys, rest} ->
+          {keys, [item | rest]}
+      end)
+      |> then(fn {keys, rest} -> {Enum.reverse(keys), Enum.reverse(rest)} end)
+    else
+      {[], tags}
+    end
+  end
+
+  defp topic_scheme?(%{"inScheme" => scheme}) when is_binary(scheme),
+    do: String.ends_with?(scheme, "#Topic")
+
+  defp topic_scheme?(_), do: false
+
+  defp fep_8a8e_categories(data, creator, named_keys) do
+    alias Bonfire.Gatherings.EventCategories
+
+    case Enum.uniq(
+           Enum.filter(EventCategories.from_object(data), &EventCategories.known?/1) ++ named_keys
+         ) do
+      [] ->
+        []
+
+      # keys -> fep_8a8e_categories(keys, creator, categories_parent(creator))
+      # the parent is looked up (or made) only if a category's topic is being made
+      keys ->
+        value_topics(keys, creator, fn -> categories_parent(creator) end)
+    end
+  end
+
+  # the topic the category topics are made under, if one is configured (by its username), made the first time it is needed
+  defp categories_parent(creator) do
+    case Bonfire.Common.Config.get([__MODULE__, :categories_parent], nil,
+           name: l("Parent of event category topics"),
+           description:
+             l(
+               "The username of a topic that the topics made for event categories (eg. Music) are put under. None by default."
+             )
+         ) do
+      username when is_binary(username) and username != "" ->
+        case Bonfire.Common.Utils.maybe_apply(
+               Bonfire.Classify.Categories,
+               :get_or_create_topic,
+               [%{username: username, name: String.capitalize(username)}, creator],
+               fallback_return: nil
+             ) do
+          {:ok, parent} -> parent
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp value_topics(keys, creator, parent) do
+    # alias Bonfire.Gatherings.EventCategories
+    #
+    # for key <- keys,
+    #     {:ok, category} <- [
+    #       # Bonfire.Common.Utils.maybe_apply(
+    #       #   Bonfire.Classify.Categories,
+    #       #   :get_or_create_mirror,
+    #       #   [
+    #       #     EventCategories.iri(key),
+    #       #     %{name: EventCategories.label(key), username: EventCategories.username(key)},
+    #       #     creator
+    #       #   ],
+    #       #   fallback_return: nil
+    #       # )
+    #       # a local topic per value, as this instance's own events use them too
+    #       Bonfire.Common.Utils.maybe_apply(
+    #         Bonfire.Classify.Categories,
+    #         :get_or_create_topic,
+    #         [
+    #           %{name: EventCategories.label(key), username: EventCategories.username(key)}
+    #           |> Enums.maybe_put(:parent_category, parent),
+    #           creator
+    #         ],
+    #         fallback_return: nil
+    #       )
+    #     ] do
+    #   category
+    # end
+    for key <- keys, {:ok, category} <- [value_topic(key, creator, parent, [])], do: category
+  end
+
+  # a local topic per value, as this instance's own events use them too: under the value the instance groups it under (`EventCategories.parent_key/1`), else under the parent of all of them. The parents are only looked up (or brought back, or made) when this one is being made or brought back
+  defp value_topic(key, creator, root_parent, seen) do
+    alias Bonfire.Gatherings.EventCategories
+
+    if EventCategories.as_label?(key),
+      do: value_label(key, creator),
+      else: value_topic_under(key, creator, root_parent, seen)
+  end
+
+  # a value the instance makes a label (what an event is about): under the "Events" label, ungrouped
+  defp value_label(key, creator) do
+    alias Bonfire.Gatherings.EventCategories
+
+    Bonfire.Common.Utils.maybe_apply(
+      Bonfire.Classify.Categories,
+      :get_or_create_topic,
+      [
+        %{
+          name: EventCategories.label(key),
+          username: EventCategories.username(key),
+          type: :label,
+          parent_category: fn -> EventCategories.events_label() end
+        },
+        creator
+      ],
+      fallback_return: nil
+    )
+  end
+
+  defp value_topic_under(key, creator, root_parent, seen) do
+    alias Bonfire.Gatherings.EventCategories
+
+    parent =
+      case EventCategories.parent_key(key) do
+        parent_key when is_binary(parent_key) ->
+          # a grouping configured in a loop would never end
+          if parent_key in [key | seen],
+            do: root_parent,
+            else: fn ->
+              case value_topic(parent_key, creator, root_parent, [key | seen]) do
+                {:ok, parent} -> parent
+                _ -> nil
+              end
+            end
+
+        _ ->
+          root_parent
+      end
+
+    Bonfire.Common.Utils.maybe_apply(
+      Bonfire.Classify.Categories,
+      :get_or_create_topic,
+      [
+        %{name: EventCategories.label(key), username: EventCategories.username(key)}
+        |> Enums.maybe_put(:parent_category, parent),
+        creator
+      ],
+      fallback_return: nil
+    )
+  end
+
+  # FEP-9b2b `Category` tags become tags of local topics, only when a local user posted it for now (as `Bonfire.Social.APActivities` does)
+  defp ap_category_tags(tags, creator) do
+    if Bonfire.Social.is_local?(creator),
+      do:
+        Bonfire.Common.Utils.maybe_apply(
+          Bonfire.Classify.Categories,
+          :ap_receive_category_tags,
+          # [List.wrap(tags), creator],
+          # named as the event category topics are, and what an event is about (a `#Topic`, Lauti's "topics") a label under the "Events" label
+          [
+            List.wrap(tags),
+            creator,
+            [
+              username_suffix: "_events",
+              label_schemes: ["#Topic"],
+              label_parent: fn -> Bonfire.Gatherings.EventCategories.events_label() end
+            ]
+          ],
+          fallback_return: []
+        ),
+      else: []
   end
 end
