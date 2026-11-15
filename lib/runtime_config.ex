@@ -46,6 +46,8 @@ defmodule Bonfire.Gatherings.RuntimeConfig do
       epics: [
         create: [
           {Bonfire.Gatherings.Event.Create, @event_act_opts},
+          # the `place` given (a name or address, geocoded here) is inserted with the event, so an event that fails leaves no place
+          {Bonfire.Geolocate.Acts.PrimaryGeolocation, @event_act_opts},
           [
             # name, summary and body, sanitised, with tags extracted
             {Bonfire.Social.Acts.PostContents, @event_act_opts},

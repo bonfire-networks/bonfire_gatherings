@@ -21,10 +21,15 @@ defmodule Bonfire.Gatherings.LiveHandler do
          {:ok, event_attrs} <- event_attrs(params),
          uploaded_media =
            Bonfire.UI.Common.live_upload_files(current_user, params["upload_metadata"], socket),
-         {event_attrs, place} =
+         # {event_attrs, place} =
+         #   event_attrs
+         #   |> Map.put(:uploaded_media, uploaded_media)
+         #   |> maybe_put_place(trimmed(params["place"]), current_user),
+         # the place is made by the epic, with the event
+         event_attrs =
            event_attrs
            |> Map.put(:uploaded_media, uploaded_media)
-           |> maybe_put_place(trimmed(params["place"]), current_user),
+           |> Map.put(:place, trimmed(params["place"])),
          {:ok, event} <-
            Events.create(
              current_user: current_user,
@@ -33,8 +38,8 @@ defmodule Bonfire.Gatherings.LiveHandler do
              to_circles: to_circles,
              verb_grants: verb_grants,
              context_id: e(params, "context_id", nil)
-           )
-           |> drop_place_on_error(place) do
+           ) do
+           # |> drop_place_on_error(place) do
       {:noreply,
        socket
        |> Bonfire.UI.Common.SmartInput.LiveHandler.reset_input()
@@ -80,25 +85,25 @@ defmodule Bonfire.Gatherings.LiveHandler do
     end
   end
 
-  defp maybe_put_place(attrs, nil, _user), do: {attrs, nil}
+  # defp maybe_put_place(attrs, nil, _user), do: {attrs, nil}
 
-  defp maybe_put_place(attrs, place, user) do
-    case maybe_apply(Bonfire.Geolocate.Geolocations, :create, [
-           user,
-           %{name: place, mappable_address: place}
-         ]) do
-      {:ok, geo} -> {Map.put(attrs, :primary_geolocation, %{geolocation_id: geo.id}), geo}
-      _ -> {attrs, nil}
-    end
-  end
+  # defp maybe_put_place(attrs, place, user) do
+  #   case maybe_apply(Bonfire.Geolocate.Geolocations, :create, [
+  #          user,
+  #          %{name: place, mappable_address: place}
+  #        ]) do
+  #     {:ok, geo} -> {Map.put(attrs, :primary_geolocation, %{geolocation_id: geo.id}), geo}
+  #     _ -> {attrs, nil}
+  #   end
+  # end
 
-  # the epic runs its acts in tasks, so it cannot share a transaction with the place: a place made for an event that failed is removed instead
-  defp drop_place_on_error({:error, _} = error, %{} = place) do
-    maybe_apply(Bonfire.Geolocate.Geolocations, :soft_delete, [place, []])
-    error
-  end
+  # # the epic runs its acts in tasks, so it cannot share a transaction with the place: a place made for an event that failed is removed instead
+  # defp drop_place_on_error({:error, _} = error, %{} = place) do
+  #   maybe_apply(Bonfire.Geolocate.Geolocations, :soft_delete, [place, []])
+  #   error
+  # end
 
-  defp drop_place_on_error(result, _place), do: result
+  # defp drop_place_on_error(result, _place), do: result
 
   defp trimmed(text) when is_binary(text) do
     case String.trim(text) do

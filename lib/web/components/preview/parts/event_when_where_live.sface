@@ -20,7 +20,7 @@
     <div data-role="event_place" class="flex items-start gap-2 mt-2">
       <#Icon iconify="ph:map-pin-fill" class="size-4 mt-0.5 shrink-0 text-muted" />
       <a
-        href={"https://www.openstreetmap.org/search?zoom=6&query=#{place}"}
+        href={"https://www.openstreetmap.org/search?zoom=6&query=#{URI.encode_www_form(place)}"}
         target="_blank"
         rel="noopener noreferrer"
         class="text-sm text-base-content hover:text-primary hover:underline transition-colors"

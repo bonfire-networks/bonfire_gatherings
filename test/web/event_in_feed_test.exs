@@ -12,7 +12,8 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     user = Fake.fake_user!(account)
     conn = conn(user: user, account: account)
 
-    geo = Bonfire.Geolocate.Simulate.fake_geolocation!(user, nil, %{name: "The Old Barn"})
+    # `&` and `#` would cut the map link's query short if not encoded
+    geo = Bonfire.Geolocate.Simulate.fake_geolocation!(user, nil, %{name: "The Old Barn & Mill #2"})
 
     {:ok, event} =
       Bonfire.Gatherings.Events.create(
@@ -31,7 +32,10 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     |> assert_has_or_open_browser("[data-id=event_preview]", text: "Harvest Supper")
     |> assert_has_or_open_browser("[data-id=event_preview] [data-role=event_time]", text: "2030")
     |> assert_has_or_open_browser("[data-id=event_preview] [data-role=event_place]",
-      text: "The Old Barn"
+      text: "The Old Barn & Mill #2"
+    )
+    |> assert_has_or_open_browser(
+      "[data-id=event_preview] a[href='https://www.openstreetmap.org/search?zoom=6&query=The+Old+Barn+%26+Mill+%232']"
     )
     |> assert_has_or_open_browser("[data-id=event_preview]", text: "Bring a dish")
     # the card leads to the event's own page

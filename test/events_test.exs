@@ -54,6 +54,37 @@ defmodule Bonfire.Gatherings.EventsTest do
     assert geo_id == geo.id
   end
 
+  test "a place given by name is made with the event, as its geolocation" do
+    user = fake_user!()
+
+    event = create!(user, event_attrs(%{place: "Hall of the Garden Party"}))
+
+    assert %{primary_geolocation: %{geolocation: %{name: "Hall of the Garden Party"}}} =
+             Event |> Repo.get!(event.id) |> Repo.preload(primary_geolocation: :geolocation)
+  end
+
+  test "a place given as the attrs of a geolocation is made with the event" do
+    user = fake_user!()
+
+    event = create!(user, event_attrs(%{place: %{name: "Plaza of the Party", lat: 45.07, long: 7.69}}))
+
+    assert %{primary_geolocation: %{geolocation: %{name: "Plaza of the Party", geom: %{coordinates: {45.07, 7.69}}}}} =
+             Event |> Repo.get!(event.id) |> Repo.preload(primary_geolocation: :geolocation)
+  end
+
+  test "an event that cannot be created leaves no place behind" do
+    user = fake_user!()
+
+    assert {:error, _} =
+             Events.create(
+               current_user: user,
+               event_attrs: event_attrs(%{time_span: %{has_beginning: nil}, place: "Hall of the Failed Party"}),
+               boundary: "public"
+             )
+
+    refute Repo.get_by(Bonfire.Geolocate.Geolocation, name: "Hall of the Failed Party")
+  end
+
   test "reading an event follows its boundary" do
     user = fake_user!()
     other = fake_user!()

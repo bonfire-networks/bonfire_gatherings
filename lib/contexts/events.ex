@@ -449,7 +449,9 @@ defmodule Bonfire.Gatherings.Events do
         Bonfire.Files.ap_receive_attachments(creator, attrs[:primary_image], attrs[:attachments])
     })
     # |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"]))
-    |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"], creator))
+    # |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"], creator))
+    |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"]))
+    |> Enums.maybe_put(:place, ap_place_without_id(List.wrap(data["location"]) |> List.first()))
   end
 
   @doc "The IANA zone if known, else nil."
@@ -473,27 +475,36 @@ defmodule Bonfire.Gatherings.Events do
 
   defp ap_place(_), do: nil
 
-  # the Place of the nested ingest (one with an `id`), else one with no `id`, as a C2S client sends it (eg. Lauti), made a Geolocation here (Geolocate's own reading of a Place: name, summary, latitude and longitude)
-  defp ap_place(location, creator) do
-    ap_place(location) || ap_place_without_id(List.wrap(location) |> List.first(), creator)
-  end
+  # # the Place of the nested ingest (one with an `id`), else one with no `id`, as a C2S client sends it (eg. Lauti), made a Geolocation here (Geolocate's own reading of a Place: name, summary, latitude and longitude)
+  # defp ap_place(location, creator) do
+  #   ap_place(location) || ap_place_without_id(List.wrap(location) |> List.first(), creator)
+  # end
 
-  defp ap_place_without_id(%{"type" => "Place"} = place, creator)
-       when not is_map_key(place, "id") do
+  # defp ap_place_without_id(%{"type" => "Place"} = place, creator)
+  #      when not is_map_key(place, "id") do
+  #   if place["name"] || (place["latitude"] && place["longitude"]) do
+  #     case Bonfire.Common.Utils.maybe_apply(
+  #            Bonfire.Geolocate.Geolocations,
+  #            :ap_receive_activity,
+  #            [creator, nil, %{data: place}],
+  #            fallback_return: nil
+  #          ) do
+  #       {:ok, %{id: geolocation_id}} -> %{geolocation_id: geolocation_id}
+  #       _ -> nil
+  #     end
+  #   end
+  # end
+
+  # a Place with no `id`, as a C2S client sends it (eg. Lauti), read as the attrs of a Geolocation (Geolocate's own reading of a Place: name, summary, latitude and longitude), which the epic's `Bonfire.Geolocate.Acts.PrimaryGeolocation` makes with the event
+  defp ap_place_without_id(%{"type" => "Place"} = place) when not is_map_key(place, "id") do
     if place["name"] || (place["latitude"] && place["longitude"]) do
-      case Bonfire.Common.Utils.maybe_apply(
-             Bonfire.Geolocate.Geolocations,
-             :ap_receive_activity,
-             [creator, nil, %{data: place}],
-             fallback_return: nil
-           ) do
-        {:ok, %{id: geolocation_id}} -> %{geolocation_id: geolocation_id}
-        _ -> nil
-      end
+      Bonfire.Common.Utils.maybe_apply(Bonfire.Geolocate.Geolocations, :ap_attrs, [place],
+        fallback_return: nil
+      )
     end
   end
 
-  defp ap_place_without_id(_, _), do: nil
+  defp ap_place_without_id(_), do: nil
 
   # the event's FEP-8a8e `category` values (known ones only) become tags of the local mirrors of those categories, whoever posted it
   # the values that a local poster's `Category` tags (event types or no scheme; a `…#Topic` one is a label's business) are named after, and the tags left for `ap_category_tags/2`

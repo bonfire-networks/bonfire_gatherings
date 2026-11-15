@@ -23,6 +23,8 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
             ]}
 
   def mount(_params, _session, socket) do
+    preview = event_preview(socket)
+
     {:ok,
      assign(socket,
        page: "events",
@@ -47,9 +49,9 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
        category_ref: nil,
        selected_label_id: nil,
        label_ref: nil,
-       event_preview: event_preview(socket),
+       event_preview: preview,
        # tiles take the width of the right sidebar
-       without_secondary_widgets: tiles?(event_preview(socket)),
+       without_secondary_widgets: tiles?(preview),
        time: :upcoming,
        base_path: "/events",
        events: [],

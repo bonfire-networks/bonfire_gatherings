@@ -59,7 +59,7 @@
         {#match place}
           <a
             data-role="event_place"
-            href={"https://www.openstreetmap.org/search?zoom=6&query=#{place}"}
+            href={"https://www.openstreetmap.org/search?zoom=6&query=#{URI.encode_www_form(place)}"}
             target="_blank"
             rel="noopener noreferrer"
             class="group flex items-center gap-3"
