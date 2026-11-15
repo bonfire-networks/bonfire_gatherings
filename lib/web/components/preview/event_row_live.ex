@@ -1,6 +1,6 @@
 defmodule Bonfire.Gatherings.Web.Preview.EventRowLive do
   @moduledoc """
-  An event as a row, for a list (the events page's list view): a square cover (or placeholder) on the left, and beside it, as tall as the square, its categories and labels, name, when and where, and its summary as plain text, clamped to fit. Built from the same parts as `Bonfire.Gatherings.Web.Preview.EventLive` (the card in feeds) and `EventTileLive`.
+  An event as a row in the events list, text first, with its cover on the right when it has one.
 
   A `custom_preview` too, as `EventTileLive` is.
   """
@@ -8,6 +8,7 @@ defmodule Bonfire.Gatherings.Web.Preview.EventRowLive do
 
   alias Bonfire.Gatherings.Web.Preview.EventLive
   alias Bonfire.Gatherings.Web.Preview.EventCoverLive
+  alias Bonfire.Common.DatesTimes
 
   prop object, :any, default: nil
   prop permalink, :string, default: nil
@@ -28,10 +29,23 @@ defmodule Bonfire.Gatherings.Web.Preview.EventRowLive do
 
   def preloads, do: EventLive.preloads()
 
-  @doc "Its summary as plain text, for a clamped line."
-  def summary_text(object) do
-    case EventLive.summary(object) do
-      text when is_binary(text) and text != "" -> Bonfire.Common.Text.text_only(text)
+  @doc "Started and not ended; never true without an end."
+  def happening_now?(object, now \\ DateTime.utc_now()) do
+    with %DateTime{} = starts <- e(object, :time_span, :has_beginning, nil),
+         %DateTime{} = ends <- e(object, :time_span, :has_end, nil) do
+      DateTime.compare(starts, now) != :gt and DateTime.compare(now, ends) != :gt
+    else
+      _ -> false
+    end
+  end
+
+  @doc "The creator's name, if loaded."
+  def host_name(object), do: EventLive.host_name(object)
+
+  @doc "The host of a remote event, else nil."
+  def origin(object) do
+    case e(object, :peered, :canonical_uri, nil) do
+      uri when is_binary(uri) and uri != "" -> Bonfire.Common.URIs.base_domain(uri)
       _ -> nil
     end
   end

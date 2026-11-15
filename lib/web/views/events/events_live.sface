@@ -1,6 +1,6 @@
 <section class="bonfire-wrapper page-panel flex flex-col gap-4 p-4">
-  <div class="flex items-center justify-between gap-2">
-    <div role="tablist" class="tabs tabs-bordered self-start">
+  <div class="flex items-end justify-between gap-2 -mx-4 px-4 border-b border-divider">
+    <div role="tablist" class="tabs tabs-border">
       <LinkLive
         to={@base_path}
         replace
@@ -15,7 +15,7 @@
       >{l("Past")}</LinkLive>
     </div>
 
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 pb-1">
       {!-- list, tiles, or the map (a page of its own, filtered as the list is, not saved), in the dropdown the group directory uses for its filters (`GroupFilterMenusLive`) --}
       <form data-id="events_layout" phx-change="set_layout">
         <StatelessComponent
@@ -25,6 +25,21 @@
         />
       </form>
     </div>
+  </div>
+
+  {!-- TODO: search, placeholder until Mayel decides --}
+  <div data-id="events_search" role="search">
+    <label class="input border-hair border-divider bg-base-100 flex items-center gap-2 w-full">
+      <span class="sr-only">{l("Search events")}</span>
+      <#Icon iconify="ph:magnifying-glass" class="size-5 shrink-0 text-muted" />
+      <input
+        type="search"
+        name="search"
+        placeholder={l("Search events")}
+        autocomplete="off"
+        class="grow"
+      />
+    </label>
   </div>
 
   {!-- the categories of the listed events (facets, as a search shows only the filters found in its results): each links to its page, which lists the events tagged with it. None on the past list for now --}
@@ -156,15 +171,40 @@
   {#else}
     {!-- a heading per day (sticky, so the day stays in sight while scrolling through it), the cards under it showing only their times --}
     {#for {day, day_events} <- by_day(@events)}
-      <h3
-        data-role="events_day"
-        class="sticky top-0 z-10 -mx-4 px-4 py-2 bg-base-100/95 backdrop-blur text-sm font-semibold text-base-content border-b border-divider"
-      >{day}</h3>
+      <section
+        data-role="events_day_group"
+        class={"relative flex flex-col gap-3", "pl-6": not tiles?(@event_preview)}
+      >
+        <span
+          :if={not tiles?(@event_preview)}
+          aria-hidden="true"
+          class="absolute left-1 top-8 -bottom-4 border-l border-dashed border-divider"
+        />
+        <h3
+          data-role="events_day"
+          class={
+            "sticky top-0 z-10 py-2 bg-base-100/95 backdrop-blur text-sm font-bold text-base-content flex items-baseline gap-2",
+            "-mx-4 px-4 border-b border-divider": tiles?(@event_preview)
+          }
+        >
+          <span
+            :if={not tiles?(@event_preview)}
+            aria-hidden="true"
+            class="absolute -left-6 top-1/2 -translate-y-1/2 size-2 rounded-full bg-fill-strong"
+          />
+          {#case day_word(List.first(day_events))}
+            {#match nil}
+              {day}
+            {#match word}
+              <span data-role="events_day_word">{word}</span>
+              <span class="font-normal text-muted">{day}</span>
+          {/case}
+        </h3>
       {#if tiles?(@event_preview)}
         {!-- as tiles in a grid (`EventTileLive`, which a feed can use too, as its `custom_preview`) --}
         <div
           data-id="events_grid"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
         >
           {#for event <- day_events}
             <StatelessComponent
@@ -207,6 +247,7 @@
           {/case}
         {/for}
       {/if}
+      </section>
     {/for}
 
     {#if e(@page_info, :end_cursor, nil)}

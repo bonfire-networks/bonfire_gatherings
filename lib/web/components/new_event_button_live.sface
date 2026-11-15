@@ -1,0 +1,10 @@
+<Bonfire.UI.Common.SmartInputButtonLive
+  :if={current_user_id(@__context__) && local_creation?()}
+  id="events_header_new"
+  component={Bonfire.Gatherings.Web.CreateEventLive}
+  prompt={l("New")}
+  icon="ph:plus"
+  icon_class="size-4"
+  class="btn btn-sm rounded-selector border-0 bg-base-content text-base-100 hover:opacity-90 shrink-0 gap-1.5"
+  smart_input_opts={%{create_object_type: :event}}
+/>

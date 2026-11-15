@@ -452,10 +452,11 @@ defmodule Bonfire.Gatherings.Events do
     |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"], creator))
   end
 
-  defp known_timezone(zone) when is_binary(zone),
+  @doc "The IANA zone if known, else nil."
+  def known_timezone(zone) when is_binary(zone),
     do: if(Tzdata.zone_exists?(zone), do: zone)
 
-  defp known_timezone(_), do: nil
+  def known_timezone(_), do: nil
 
   # the Geolocation the nested ingest made of the event's `Place` (Geolocate declares "Place"); an id-less Place has none
   defp ap_place([first | _]), do: ap_place(first)

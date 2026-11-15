@@ -3,7 +3,6 @@
   data-layout="tile"
   class="h-full flex flex-col rounded-box border border-divider bg-base-100 overflow-hidden"
 >
-  {!-- a square cover, with the title over its bottom (on a gradient, so it reads on any image) and the date chip at the top --}
   <Bonfire.Gatherings.Web.Preview.EventCoverLive
     object={@object}
     primary_image={cover(@primary_image, @object)}
@@ -12,8 +11,17 @@
     chip_position_class="top-3 left-3"
     show_date_chip={not @date_in_heading}
     exclude_category_id={@exclude_category_id}
+    show_badge={false}
   >
     <div class="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/75 via-black/40 to-transparent px-4 pb-4 pt-12">
+      <div
+        :if={Bonfire.Gatherings.Web.Preview.EventCoverLive.badge_names(@object, @exclude_category_id) != []}
+        class="flex flex-wrap gap-1 mb-2"
+      >
+        {#for name <- Bonfire.Gatherings.Web.Preview.EventCoverLive.badge_names(@object, @exclude_category_id)}
+          <span data-role="event_badge" class="badge badge-sm border-0 bg-white/20 text-white backdrop-blur">{name}</span>
+        {/for}
+      </div>
       <LinkLive to={@permalink || path(@object)}>
         <h2 class="text-lg font-semibold text-white text-balance leading-snug drop-shadow hover:underline">
           {EventLive.name(@object) || l("Untitled event")}

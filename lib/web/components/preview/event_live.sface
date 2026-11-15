@@ -8,6 +8,113 @@
       {name(@object) || l("Untitled event")}
     </h2>
   </div>
+{#elseif @viewing_main_object}
+  {!-- the event's own page --}
+  <div data-id="event_preview" data-layout="page" class="flex flex-col gap-5">
+    {#case Bonfire.Common.Media.media_url(@primary_image)}
+      {#match nil}
+      {#match url}
+        <div
+          data-id="event_cover"
+          role="img"
+          aria-label={Bonfire.Files.Media.media_alt(@primary_image)}
+          class="w-full aspect-video rounded-box bg-center bg-no-repeat bg-cover bg-placeholder"
+          style={"background-image: url('#{url}')"}
+        >
+          <span class="sr-only">{Bonfire.Files.Media.media_alt(@primary_image)}</span>
+        </div>
+    {/case}
+
+    <div class="flex flex-col gap-1.5">
+      <h1 class="type-page-title">
+        {name(@object) || l("Untitled event")}
+      </h1>
+      <p :if={host_name(@object, @activity)} data-role="event_host" class="type-meta text-muted">
+        {l("By %{name}", name: host_name(@object, @activity))}
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-3">
+      {#case starts(@object)}
+        {#match nil}
+        {#match start}
+          <div data-role="event_time" class="flex items-center gap-3">
+            {#case DatesTimes.chip_parts(start)}
+              {#match nil}
+              {#match c}
+                <div class="size-10 shrink-0 flex flex-col items-center justify-center overflow-hidden rounded-box border border-divider text-center" aria-hidden="true">
+                  <span class="w-full py-0.5 bg-fill type-overline leading-none text-muted">{c.month}</span>
+                  <span class="text-base font-bold text-base-content">{c.day}</span>
+                </div>
+            {/case}
+            <time datetime={start.iso} class="flex flex-col">
+              <span class="type-meta font-medium text-base-content">{DatesTimes.format_day(start)}</span>
+              <span class="type-meta text-muted">{DatesTimes.format_time_range(start, ends(@object)) || l("All day")}</span>
+            </time>
+          </div>
+      {/case}
+
+      {#case place(@object)}
+        {#match nil}
+        {#match place}
+          <a
+            data-role="event_place"
+            href={"https://www.openstreetmap.org/search?zoom=6&query=#{place}"}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="group flex items-center gap-3"
+          >
+            <span class="size-10 shrink-0 grid place-items-center rounded-box border border-divider text-muted">
+              <#Icon iconify="ph:map-pin" class="size-5" />
+            </span>
+            <span class="flex items-center gap-1 type-meta font-medium text-base-content group-hover:underline">
+              {place}
+              <#Icon iconify="ph:arrow-up-right" class="size-3.5 text-muted" />
+            </span>
+          </a>
+      {/case}
+    </div>
+
+    {!-- TODO: hardcoded until RSVP exists (F4) --}
+    <div data-role="event_rsvp" class="rounded-box border border-divider bg-base-100 overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-2.5 bg-fill border-b border-divider type-caption text-muted">
+        <span>{l("Are you going?")}</span>
+      </div>
+      <div class="p-4">
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            class="btn btn-sm border-base-content bg-base-content text-base-100 hover:opacity-90"
+          >{l("Going")}</button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline border-divider"
+          >{l("Interested")}</button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline border-divider"
+          >{l("Can't go")}</button>
+        </div>
+        {!-- TODO: say who sees an answer once F4 decides --}
+      </div>
+    </div>
+
+    {#case summary(@object)}
+      {#match nil}
+      {#match ""}
+      {#match text}
+        <div class="border-t border-divider pt-5">
+          <h2 class="type-overline text-muted mb-2">{l("About")}</h2>
+          <Bonfire.UI.Common.TruncatableContentLive
+            html_body={text}
+            parent_id={deterministic_dom_id(__MODULE__, nil, nil, @parent_id)}
+            showing_within={@showing_within}
+            viewing_main_object={@viewing_main_object}
+            activity_inception={@activity_inception}
+          />
+        </div>
+    {/case}
+  </div>
 {#else}
   {!-- the cover, badge and date chip, and the when and where, are parts shared with the tile (`EventTileLive`) --}
   <div

@@ -1,5 +1,14 @@
 defmodule Bonfire.Gatherings.RuntimeConfig do
   use Bonfire.Common.Localise
+  import Bonfire.UI.Common.Modularity.DeclareHelpers
+
+  # off: events only arrive over C2S or federation
+  declare_settings(:toggle, l("Create events on this instance"),
+    keys: [Bonfire.Gatherings.Events, :local_creation],
+    default_value: false,
+    description: l("Let signed-in users create events here, from the New button on the events page."),
+    scope: :instance
+  )
 
   @behaviour Bonfire.Common.ConfigModule
   def config_module, do: true
@@ -21,6 +30,9 @@ defmodule Bonfire.Gatherings.RuntimeConfig do
     # reserves the usernames of the event category topics, off the boot path, on every boot until done (`Bonfire.Gatherings.EventCategories.run/0`)
     config :bonfire_common, Bonfire.Common.StartupTasks,
       run: [reserve_event_category_topics: Bonfire.Gatherings.EventCategories]
+
+    config :bonfire_ui_common, Bonfire.UI.Common.InputControlsLive,
+      enable_fields: [title: [event: [show_by_default: true]]]
 
     config :bonfire, :ui,
       object_preview: [

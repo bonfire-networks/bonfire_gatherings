@@ -1,0 +1,93 @@
+<div id="smart_input_event_content" class="write_post_content flex flex-col flex-1 min-h-0">
+  <Form
+    for={%{}}
+    as={:post}
+    submit="Bonfire.Gatherings:create_event"
+    action="Bonfire.Gatherings:create_event"
+    change="Bonfire.UI.Common.SmartInput:validate"
+    opts={
+      autocomplete: "off",
+      "phx-target": "#smart_input"
+    }
+    class="with_editor flex flex-col flex-1 min-h-0"
+  >
+    <Bonfire.UI.Common.InputControlsLive
+      composer_policy={@composer_policy}
+      smart_input_opts={@smart_input_opts}
+      thread_mode={@thread_mode}
+      reply_to_id={uid(@reply_to_id)}
+      context_id={@context_id}
+      create_object_type={@create_object_type}
+      to_boundaries={@to_boundaries}
+      to_circles={@to_circles}
+      exclude_circles={@exclude_circles}
+      showing_within={@showing_within}
+      uploads={@uploads}
+      uploaded_files={@uploaded_files}
+      selected_cover={@selected_cover}
+      submit_label={l("Post event")}
+    >
+      <div class="flex flex-col gap-4 px-3 py-3">
+        <div class="flex flex-col gap-1.5">
+          <label for="event_description" class="type-meta font-medium text-base-content">
+            {l("Description")}
+          </label>
+          <div id="event_description_wrapper" data-role="reset_on_post" phx-update="ignore">
+            <textarea
+              id="event_description"
+              name="post[post_content][html_body]"
+              rows="4"
+              placeholder={l("What is it, and who is it for?")}
+              class="textarea w-full border-divider bg-base-100"
+            >{Bonfire.Common.Text.normalize_whitespace(e(@smart_input_opts, :text, nil))}</textarea>
+          </div>
+        </div>
+
+        {!-- bonfire_live.js writes UTC into the hidden inputs --}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div id="event_starts_wrapper" data-role="reset_on_post" class="flex flex-col gap-1.5" phx-update="ignore">
+            <label for="event_starts_local" class="type-meta font-medium text-base-content">{l("Starts")}</label>
+            <input
+              id="event_starts_local"
+              type="datetime-local"
+              data-role="local_datetime"
+              required
+              class="input w-full border-divider bg-base-100"
+            />
+            <input type="hidden" name="starts_at" data-role="utc_value">
+            <input type="hidden" name="timezone" data-role="browser_timezone">
+          </div>
+          <div id="event_ends_wrapper" data-role="reset_on_post" class="flex flex-col gap-1.5" phx-update="ignore">
+            <label for="event_ends_local" class="type-meta font-medium text-base-content">
+              {l("Ends")} <span class="font-normal text-muted">{l("(optional)")}</span>
+            </label>
+            <input
+              id="event_ends_local"
+              type="datetime-local"
+              data-role="local_datetime"
+              class="input w-full border-divider bg-base-100"
+            />
+            <input type="hidden" name="ends_at" data-role="utc_value">
+          </div>
+        </div>
+
+        <div id="event_place_wrapper" data-role="reset_on_post" class="flex flex-col gap-1.5" phx-update="ignore">
+          <label for="event_place" class="type-meta font-medium text-base-content">
+            {l("Place")} <span class="font-normal text-muted">{l("(optional)")}</span>
+          </label>
+          <label class="input w-full border-divider bg-base-100 flex items-center gap-2">
+            <#Icon iconify="ph:map-pin" class="size-4 shrink-0 text-muted" />
+            <input
+              id="event_place"
+              type="text"
+              name="place"
+              autocomplete="off"
+              placeholder={l("An address or the name of a place")}
+              class="grow"
+            />
+          </label>
+        </div>
+      </div>
+    </Bonfire.UI.Common.InputControlsLive>
+  </Form>
+</div>

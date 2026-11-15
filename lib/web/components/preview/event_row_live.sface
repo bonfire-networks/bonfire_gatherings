@@ -1,39 +1,70 @@
-{!-- the tile's square (badges, title over the cover, and the time or date chip) on the left, half the width; beside it the place and the summary, clamped to the square's height --}
 <div
   data-id="event_preview"
   data-layout="list"
-  class="flex rounded-box border border-divider bg-base-100 overflow-hidden"
+  class="flex gap-4 px-4 py-3.5 rounded-box border border-divider bg-surface hover:bg-fill transition-colors"
 >
-  <div class="w-1/2 shrink-0">
-    <Bonfire.Gatherings.Web.Preview.EventCoverLive
-      object={@object}
-      primary_image={cover(@primary_image, @object)}
-      cover_class="aspect-square border-b-0"
-      placeholder_class="aspect-square border-b-0"
-      chip_position_class="top-3 left-3"
-      show_date_chip={not @date_in_heading}
-      exclude_category_id={@exclude_category_id}
+  <div class="flex-1 min-w-0 flex flex-col gap-1">
+    {#case EventLive.starts(@object)}
+      {#match nil}
+      {#match start}
+        <div class="flex items-center gap-2 type-caption text-muted">
+          <span
+            :if={happening_now?(@object)}
+            data-role="event_now"
+            class="badge badge-sm badge-error badge-soft gap-1 font-medium"
+          >
+            <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
+            {l("Now")}
+          </span>
+          <time data-role="event_time" datetime={start.iso}>
+            {#if @date_in_heading}
+              {DatesTimes.format_time_range(start, EventLive.ends(@object)) || l("All day")}
+            {#else}
+              {DatesTimes.format_range(start, EventLive.ends(@object))}
+            {/if}
+          </time>
+        </div>
+    {/case}
+
+    <LinkLive to={@permalink || path(@object)}>
+      <h2 class="text-base font-bold text-base-content text-balance leading-snug line-clamp-2 hover:underline">
+        {EventLive.name(@object) || l("Untitled event")}
+      </h2>
+    </LinkLive>
+
+    <p :if={host_name(@object)} data-role="event_host" class="type-meta text-muted truncate">
+      {l("By %{name}", name: host_name(@object))}
+    </p>
+
+    {!-- div, not p: the icon is a block --}
+    <div :if={EventLive.place(@object)} data-role="event_place" class="flex items-center gap-1.5 type-meta text-muted min-w-0">
+      <#Icon iconify="ph:map-pin" class="size-4 shrink-0" />
+      <span class="truncate">{EventLive.place(@object)}</span>
+    </div>
+
+    <div
+      :if={badge_names(@object, @exclude_category_id) != [] or origin(@object)}
+      class="flex flex-wrap items-center gap-1.5 mt-1"
     >
-      <div class="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/75 via-black/40 to-transparent px-4 pb-4 pt-12">
-        <LinkLive to={@permalink || path(@object)}>
-          <h2 class="text-lg font-semibold text-white text-balance leading-snug line-clamp-3 drop-shadow hover:underline">
-            {EventLive.name(@object) || l("Untitled event")}
-          </h2>
-        </LinkLive>
-      </div>
-    </Bonfire.Gatherings.Web.Preview.EventCoverLive>
-  </div>
+      {#for name <- badge_names(@object, @exclude_category_id)}
+        <span data-role="event_badge" class="badge badge-sm border-0 bg-fill-strong text-base-content">{name}</span>
+      {/for}
 
-  {!-- as tall as the square: what does not fit is cut --}
-  <div class="relative w-1/2">
-    <div class="absolute inset-0 overflow-hidden p-4 flex flex-col">
-      <Bonfire.Gatherings.Web.Preview.EventWhenWhereLive
-        object={@object}
-        time_only={@date_in_heading}
-        show_time={not @date_in_heading}
-      />
-
-      <p :if={summary_text(@object)} class="mt-3 text-sm text-base-content/80 line-clamp-[8]">{summary_text(@object)}</p>
+      <span :if={origin(@object)} data-role="event_origin" class="type-caption text-muted">
+        {l("from %{server}", server: origin(@object))}
+      </span>
     </div>
   </div>
+
+  {#case Bonfire.Common.Media.media_url(cover(@primary_image, @object))}
+    {#match nil}
+    {#match url}
+      <div
+        data-id="event_cover"
+        role="img"
+        aria-label={Bonfire.Files.Media.media_alt(cover(@primary_image, @object))}
+        class="size-24 shrink-0 rounded-box bg-center bg-no-repeat bg-cover bg-placeholder"
+        style={"background-image: url('#{url}')"}
+      />
+  {/case}
 </div>

@@ -48,6 +48,12 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
 
   defp timezone(object), do: e(object, :time_span, :timezone, nil)
 
+  @doc "The host's name: the activity subject, else the creator if loaded."
+  def host_name(object, activity \\ nil) do
+    host = e(activity, :subject, nil) || e(object, :created, :creator, nil)
+    e(host, :profile, :name, nil) || e(host, :character, :username, nil)
+  end
+
   def place(object) do
     geo = e(object, :primary_geolocation, :geolocation, nil)
 

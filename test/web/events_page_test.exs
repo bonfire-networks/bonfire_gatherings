@@ -178,8 +178,8 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     |> visit("/events")
     |> assert_has("[data-id=event_preview] [data-role=event_badge]", text: "Jazz")
     |> assert_has("[data-id=event_preview] [data-role=event_badge]", text: "Family friendly")
-    # with neither, it is an event
-    |> assert_has("[data-id=event_preview] [data-role=event_badge]", text: "Event")
+    # untagged: no badge
+    |> refute_has("[data-id=event_preview] [data-role=event_badge]", text: "Event")
 
     conn
     |> visit("/events/category/#{topic.character.username}")

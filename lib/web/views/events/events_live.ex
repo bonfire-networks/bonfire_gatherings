@@ -34,6 +34,7 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
          guests: [secondary: [{Bonfire.Tag.Web.WidgetTagsLive, []}]]
        ],
        page_header_icon: "ph:calendar-blank-fill",
+       page_header_aside: [{Bonfire.Gatherings.Web.NewEventButtonLive, []}],
        no_index: true,
        back: true,
        tags: nil,
@@ -254,6 +255,9 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
   defp day_of(event),
     do: Bonfire.Common.DatesTimes.format_day(EventLive.starts(event)) || l("Date unknown")
 
+  @doc "Today, Tomorrow or Yesterday for an event's start day, else nil."
+  def day_word(event), do: Bonfire.Common.DatesTimes.relative_day(EventLive.starts(event))
+
   @doc "The end of a path that keeps to the list being viewed: `/past` on the past one."
   def time_suffix(:past), do: "/past"
   def time_suffix(_upcoming), do: ""
@@ -384,7 +388,12 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
     # what the cards show, loaded once for the page
     # events = repo().maybe_preload(events, EventLive.preloads())
     # with the names of their categories and labels, for the cards' badges (here only, not in feeds' preloads)
-    events = repo().maybe_preload(events, EventLive.preloads() ++ [tags: [:profile]])
+    events =
+      repo().maybe_preload(
+        events,
+        EventLive.preloads() ++
+          [tags: [:profile], created: [creator: [:profile, :character]], peered: []]
+      )
 
     assign(socket,
       tags: tags,
