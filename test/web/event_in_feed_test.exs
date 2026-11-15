@@ -13,7 +13,8 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     conn = conn(user: user, account: account)
 
     # `&` and `#` would cut the map link's query short if not encoded
-    geo = Bonfire.Geolocate.Simulate.fake_geolocation!(user, nil, %{name: "The Old Barn & Mill #2"})
+    geo =
+      Bonfire.Geolocate.Simulate.fake_geolocation!(user, nil, %{name: "The Old Barn & Mill #2"})
 
     {:ok, event} =
       Bonfire.Gatherings.Events.create(

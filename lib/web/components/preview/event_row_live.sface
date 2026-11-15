@@ -37,7 +37,11 @@
     </p>
 
     {!-- div, not p: the icon is a block --}
-    <div :if={EventLive.place(@object)} data-role="event_place" class="flex items-center gap-1.5 type-meta text-muted min-w-0">
+    <div
+      :if={EventLive.place(@object)}
+      data-role="event_place"
+      class="flex items-center gap-1.5 type-meta text-muted min-w-0"
+    >
       <#Icon iconify="ph:map-pin" class="size-4 shrink-0" />
       <span class="truncate">{EventLive.place(@object)}</span>
     </div>

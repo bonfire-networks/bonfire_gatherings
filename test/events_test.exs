@@ -66,9 +66,14 @@ defmodule Bonfire.Gatherings.EventsTest do
   test "a place given as the attrs of a geolocation is made with the event" do
     user = fake_user!()
 
-    event = create!(user, event_attrs(%{place: %{name: "Plaza of the Party", lat: 45.07, long: 7.69}}))
+    event =
+      create!(user, event_attrs(%{place: %{name: "Plaza of the Party", lat: 45.07, long: 7.69}}))
 
-    assert %{primary_geolocation: %{geolocation: %{name: "Plaza of the Party", geom: %{coordinates: {45.07, 7.69}}}}} =
+    assert %{
+             primary_geolocation: %{
+               geolocation: %{name: "Plaza of the Party", geom: %{coordinates: {45.07, 7.69}}}
+             }
+           } =
              Event |> Repo.get!(event.id) |> Repo.preload(primary_geolocation: :geolocation)
   end
 
@@ -78,7 +83,11 @@ defmodule Bonfire.Gatherings.EventsTest do
     assert {:error, _} =
              Events.create(
                current_user: user,
-               event_attrs: event_attrs(%{time_span: %{has_beginning: nil}, place: "Hall of the Failed Party"}),
+               event_attrs:
+                 event_attrs(%{
+                   time_span: %{has_beginning: nil},
+                   place: "Hall of the Failed Party"
+                 }),
                boundary: "public"
              )
 

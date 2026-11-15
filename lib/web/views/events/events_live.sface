@@ -200,28 +200,25 @@
               <span class="font-normal text-muted">{day}</span>
           {/case}
         </h3>
-      {#if tiles?(@event_preview)}
-        {!-- as tiles in a grid (`EventTileLive`, which a feed can use too, as its `custom_preview`) --}
-        <div
-          data-id="events_grid"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-        >
+        {#if tiles?(@event_preview)}
+          {!-- as tiles in a grid (`EventTileLive`, which a feed can use too, as its `custom_preview`) --}
+          <div data-id="events_grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {#for event <- day_events}
+              <StatelessComponent
+                module={@event_preview}
+                object={event}
+                date_in_heading
+                exclude_category_id={@selected_category_id}
+              />
+            {/for}
+          </div>
+        {#else}
           {#for event <- day_events}
-            <StatelessComponent
-              module={@event_preview}
-              object={event}
-              date_in_heading
-              exclude_category_id={@selected_category_id}
-            />
-          {/for}
-        </div>
-      {#else}
-        {#for event <- day_events}
-          {!-- <EventLive object={event} parent_id={"events_page_#{id(event)}"} showing_within={:events} /> --}
-          {!-- its primary image as the cover and the rest listed, as in feeds (`Bonfire.UI.Social.ActivityLive`) --}
-          {#case Bonfire.Files.split_primary_image(e(event, :files, nil))}
-            {#match {primary_image, media}}
-              {!-- <EventLive
+            {!-- <EventLive object={event} parent_id={"events_page_#{id(event)}"} showing_within={:events} /> --}
+            {!-- its primary image as the cover and the rest listed, as in feeds (`Bonfire.UI.Social.ActivityLive`) --}
+            {#case Bonfire.Files.split_primary_image(e(event, :files, nil))}
+              {#match {primary_image, media}}
+                {!-- <EventLive
               object={event}
               primary_image={primary_image}
               parent_id={"events_page_#{id(event)}"}
@@ -229,24 +226,24 @@
               date_in_heading
               exclude_category_id={@selected_category_id}
             /> --}
-              {!-- a row: a square cover, its text beside it --}
-              <StatelessComponent
-                module={@event_preview}
-                object={event}
-                primary_image={primary_image}
-                date_in_heading
-                exclude_category_id={@selected_category_id}
-              />
-              <StatelessComponent
-                :if={media != []}
-                module={maybe_component(Bonfire.UI.Social.Activity.MediaLive, @__context__)}
-                media={media}
-                parent_id={"events_page_media_#{id(event)}"}
-                showing_within={:events}
-              />
-          {/case}
-        {/for}
-      {/if}
+                {!-- a row: a square cover, its text beside it --}
+                <StatelessComponent
+                  module={@event_preview}
+                  object={event}
+                  primary_image={primary_image}
+                  date_in_heading
+                  exclude_category_id={@selected_category_id}
+                />
+                <StatelessComponent
+                  :if={media != []}
+                  module={maybe_component(Bonfire.UI.Social.Activity.MediaLive, @__context__)}
+                  media={media}
+                  parent_id={"events_page_media_#{id(event)}"}
+                  showing_within={:events}
+                />
+            {/case}
+          {/for}
+        {/if}
       </section>
     {/for}
 

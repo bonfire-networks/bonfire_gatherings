@@ -45,7 +45,12 @@
 
         {!-- bonfire_live.js writes UTC into the hidden inputs --}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div id="event_starts_wrapper" data-role="reset_on_post" class="flex flex-col gap-1.5" phx-update="ignore">
+          <div
+            id="event_starts_wrapper"
+            data-role="reset_on_post"
+            class="flex flex-col gap-1.5"
+            phx-update="ignore"
+          >
             <label for="event_starts_local" class="type-meta font-medium text-base-content">{l("Starts")}</label>
             <input
               id="event_starts_local"
@@ -57,7 +62,12 @@
             <input type="hidden" name="starts_at" data-role="utc_value">
             <input type="hidden" name="timezone" data-role="browser_timezone">
           </div>
-          <div id="event_ends_wrapper" data-role="reset_on_post" class="flex flex-col gap-1.5" phx-update="ignore">
+          <div
+            id="event_ends_wrapper"
+            data-role="reset_on_post"
+            class="flex flex-col gap-1.5"
+            phx-update="ignore"
+          >
             <label for="event_ends_local" class="type-meta font-medium text-base-content">
               {l("Ends")} <span class="font-normal text-muted">{l("(optional)")}</span>
             </label>
@@ -71,7 +81,12 @@
           </div>
         </div>
 
-        <div id="event_place_wrapper" data-role="reset_on_post" class="flex flex-col gap-1.5" phx-update="ignore">
+        <div
+          id="event_place_wrapper"
+          data-role="reset_on_post"
+          class="flex flex-col gap-1.5"
+          phx-update="ignore"
+        >
           <label for="event_place" class="type-meta font-medium text-base-content">
             {l("Place")} <span class="font-normal text-muted">{l("(optional)")}</span>
           </label>

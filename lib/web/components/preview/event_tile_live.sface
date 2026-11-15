@@ -19,7 +19,10 @@
         class="flex flex-wrap gap-1 mb-2"
       >
         {#for name <- Bonfire.Gatherings.Web.Preview.EventCoverLive.badge_names(@object, @exclude_category_id)}
-          <span data-role="event_badge" class="badge badge-sm border-0 bg-white/20 text-white backdrop-blur">{name}</span>
+          <span
+            data-role="event_badge"
+            class="badge badge-sm border-0 bg-white/20 text-white backdrop-blur"
+          >{name}</span>
         {/for}
       </div>
       <LinkLive to={@permalink || path(@object)}>

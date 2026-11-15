@@ -42,7 +42,10 @@
             {#case DatesTimes.chip_parts(start)}
               {#match nil}
               {#match c}
-                <div class="size-10 shrink-0 flex flex-col items-center justify-center overflow-hidden rounded-box border border-divider text-center" aria-hidden="true">
+                <div
+                  class="size-10 shrink-0 flex flex-col items-center justify-center overflow-hidden rounded-box border border-divider text-center"
+                  aria-hidden="true"
+                >
                   <span class="w-full py-0.5 bg-fill type-overline leading-none text-muted">{c.month}</span>
                   <span class="text-base font-bold text-base-content">{c.day}</span>
                 </div>
@@ -86,14 +89,8 @@
             type="button"
             class="btn btn-sm border-base-content bg-base-content text-base-100 hover:opacity-90"
           >{l("Going")}</button>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline border-divider"
-          >{l("Interested")}</button>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline border-divider"
-          >{l("Can't go")}</button>
+          <button type="button" class="btn btn-sm btn-outline border-divider">{l("Interested")}</button>
+          <button type="button" class="btn btn-sm btn-outline border-divider">{l("Can't go")}</button>
         </div>
         {!-- TODO: say who sees an answer once F4 decides --}
       </div>

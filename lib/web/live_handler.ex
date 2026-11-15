@@ -17,7 +17,9 @@ defmodule Bonfire.Gatherings.LiveHandler do
         fallback_return: {[], []}
       )
 
-    with true <- NewEventButtonLive.local_creation?() || {:error, l("Creating events is not enabled on this instance")},
+    with true <-
+           NewEventButtonLive.local_creation?() ||
+             {:error, l("Creating events is not enabled on this instance")},
          {:ok, event_attrs} <- event_attrs(params),
          uploaded_media =
            Bonfire.UI.Common.live_upload_files(current_user, params["upload_metadata"], socket),
@@ -39,7 +41,7 @@ defmodule Bonfire.Gatherings.LiveHandler do
              verb_grants: verb_grants,
              context_id: e(params, "context_id", nil)
            ) do
-           # |> drop_place_on_error(place) do
+      # |> drop_place_on_error(place) do
       {:noreply,
        socket
        |> Bonfire.UI.Common.SmartInput.LiveHandler.reset_input()

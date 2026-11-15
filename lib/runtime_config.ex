@@ -6,7 +6,8 @@ defmodule Bonfire.Gatherings.RuntimeConfig do
   declare_settings(:toggle, l("Create events on this instance"),
     keys: [Bonfire.Gatherings.Events, :local_creation],
     default_value: false,
-    description: l("Let signed-in users create events here, from the New button on the events page."),
+    description:
+      l("Let signed-in users create events here, from the New button on the events page."),
     scope: :instance
   )
 

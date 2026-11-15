@@ -42,7 +42,10 @@ defmodule Bonfire.Gatherings.Web.CreateEventTest do
   end
 
   setup do
-    on_exit(fn -> Process.delete([:bonfire_gatherings, Bonfire.Gatherings.Events, :local_creation]) end)
+    on_exit(fn ->
+      Process.delete([:bonfire_gatherings, Bonfire.Gatherings.Events, :local_creation])
+    end)
+
     %{user: fake_user!()}
   end
 
