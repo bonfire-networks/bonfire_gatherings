@@ -25,26 +25,29 @@ defmodule Bonfire.Gatherings.APActivityEventsMigration do
     )
   end
 
-  @doc "Converts each of `rows` (from `base_query/0`), one transaction each."
-  def migrate(rows), do: Enum.each(rows, &convert/1)
+  @doc "Converts each of `rows` (from `base_query/0`), one transaction each, in the repo given as `opts[:repo]` (a migration passes the one it runs on), else the normal one."
+  def migrate(rows, opts \\ []) do
+    repo = Keyword.get(opts, :repo, Repo)
+    Enum.each(rows, &convert(&1, repo))
+  end
 
-  defp convert(%{id: id, json: json}) do
+  defp convert(%{id: id, json: json}, repo) do
     {:ok, ulid} = Needle.ULID.load(id)
     event = event_json(json)
 
-    Repo.transaction(fn ->
-      put_post_content(ulid, event)
-      put_time_span(ulid, event)
+    repo.transaction(fn ->
+      put_post_content(ulid, event, repo)
+      put_time_span(ulid, event, repo)
       put_place(ulid, event["location"])
 
-      Repo.update_all(from(pp in "pointers_pointer", where: pp.id == ^id),
+      repo.update_all(from(pp in "pointers_pointer", where: pp.id == ^id),
         set: [table_id: Needle.ULID.dump!(@event_table_id)]
       )
 
-      Repo.delete_all(from(a in "bonfire_data_social_apactivity", where: a.id == ^id))
+      repo.delete_all(from(a in "bonfire_data_social_apactivity", where: a.id == ^id))
 
       # removing a pointable's row marks its pointer deleted (Needle's delete trigger), which would hide the event it now is
-      Repo.update_all(from(pp in "pointers_pointer", where: pp.id == ^id), set: [deleted_at: nil])
+      repo.update_all(from(pp in "pointers_pointer", where: pp.id == ^id), set: [deleted_at: nil])
     end)
   end
 
@@ -52,17 +55,17 @@ defmodule Bonfire.Gatherings.APActivityEventsMigration do
   defp event_json(event), do: event
 
   # sanitised here, as ingest does for remote content; not through `PostContents.ap_receive_attrs_prepare/4`, which can fetch the actors it mentions
-  defp put_post_content(id, event) do
+  defp put_post_content(id, event, repo) do
     struct(Bonfire.Data.Social.PostContent, id: id)
     |> Bonfire.Data.Social.PostContent.changeset(%{
       name: event["name"],
       summary: event["summary"],
       html_body: Bonfire.Common.Text.maybe_sane_html(event["content"])
     })
-    |> Repo.insert(on_conflict: :nothing, conflict_target: :id)
+    |> repo.insert(on_conflict: :nothing, conflict_target: :id)
   end
 
-  defp put_time_span(id, event) do
+  defp put_time_span(id, event, repo) do
     zone = event["timezone"]
 
     %Bonfire.Data.Time.TimeSpan{id: id}
@@ -72,7 +75,7 @@ defmodule Bonfire.Gatherings.APActivityEventsMigration do
       # an unknown zone is dropped rather than leaving the event behind
       timezone: if(is_binary(zone) and Tzdata.zone_exists?(zone), do: zone)
     })
-    |> Repo.insert(on_conflict: :nothing, conflict_target: :id)
+    |> repo.insert(on_conflict: :nothing, conflict_target: :id)
   end
 
   # the Geolocation the nested ingest made of the Place, if it had an id
