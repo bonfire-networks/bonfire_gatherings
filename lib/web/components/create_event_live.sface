@@ -1,13 +1,15 @@
 <div id="smart_input_event_content" class="write_post_content flex flex-col flex-1 min-h-0">
+  {!-- a plain phx-change, as `WritePostContentLive`: Surface's `change=` would push to this component,
+       while validate belongs to the composer that owns the draft (phx-target) --}
   <Form
     for={%{}}
     as={:post}
     submit="Bonfire.Gatherings:create_event"
     action="Bonfire.Gatherings:create_event"
-    change="Bonfire.UI.Common.SmartInput:validate"
     opts={
       autocomplete: "off",
-      "phx-target": "#smart_input"
+      "phx-change": "Bonfire.UI.Common.SmartInput:validate",
+      "phx-target": @event_target || "#smart_input"
     }
     class="with_editor flex flex-col flex-1 min-h-0"
   >
