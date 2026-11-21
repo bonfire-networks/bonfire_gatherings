@@ -360,6 +360,10 @@ if Application.compile_env(:bonfire_api_graphql, :modularity) != :disabled do
         subject: get_fields(activity, [:account, :subject]),
         media: get_field(activity, :media) || [],
         tags: get_field(activity, :tags) || [],
+        # the GraphQL node's own (`mentions`, `hashtags`, `visibility`), as a post in the same feed has them
+        mentions: get_field(activity, :mentions),
+        hashtags: get_field(activity, :hashtags),
+        visibility: get_field(activity, :visibility),
         like_count: get_field(activity, :like_count) || 0,
         boost_count: get_field(activity, :boost_count) || 0,
         replies_count: get_field(activity, :replies_count) || 0,
