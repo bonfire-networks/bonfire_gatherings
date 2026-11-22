@@ -236,7 +236,9 @@ defmodule Bonfire.Gatherings.EventsTest do
     # Bonfire.Gatherings.EventCategories.reserve_topics()
     # a startup task, run off the boot path on every boot (so a run that was interrupted is tried again), cheap to skip once done
     assert Bonfire.Gatherings.EventCategories in Bonfire.Common.StartupTasks.tasks()
-    Bonfire.Gatherings.EventCategories.run()
+    # Bonfire.Gatherings.EventCategories.run()
+    # the task does nothing in tests (it would race the sandbox at boot), so the reservation it runs is called here
+    Bonfire.Gatherings.EventCategories.reserve_topics()
 
     assert {:error, _} =
              Bonfire.Classify.Categories.get("music_events", skip_boundary_check: true)

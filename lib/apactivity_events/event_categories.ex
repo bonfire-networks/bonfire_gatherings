@@ -56,10 +56,14 @@ defmodule Bonfire.Gatherings.EventCategories do
 
   @behaviour Bonfire.Common.StartupTask
 
-  @doc "Startup task (`Bonfire.Common.StartupTasks`, off the boot path): reserves the topics' usernames (`reserve_topics/0`), skipped once every one is held, which one query checks."
+  @doc "Startup task (`Bonfire.Common.StartupTasks`, off the boot path): reserves the topics' usernames (`reserve_topics/0`), skipped once every one is held, which one query checks. Not in tests, where it would race the database sandbox at boot: a test that needs the reservation calls `reserve_topics/0`."
   @impl Bonfire.Common.StartupTask
   def run do
-    if all_reserved?(), do: :ok, else: reserve_topics()
+    cond do
+      Bonfire.Common.Config.env() == :test -> :ok
+      all_reserved?() -> :ok
+      true -> reserve_topics()
+    end
   end
 
   defp all_reserved? do
