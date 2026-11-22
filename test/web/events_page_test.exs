@@ -272,7 +272,12 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
          %{conn: conn, me: me} do
       # maps need a tiles key (not left to the `.env`)
       Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
-      geo = Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{name: "The Old Barn"})
+      geo =
+        Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{
+          name: "The Old Barn",
+          lat: 45.07,
+          long: 7.69
+        })
 
       event =
         event!(me, "Harvest Supper", hours(48), nil, %{
@@ -306,10 +311,49 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       assert popup =~ "The Old Barn"
       assert popup =~ "/discussion/#{event.id}"
 
+      doc = Floki.parse_document!(html)
+
+      # the map is drawn around the events' places (the map's JS fits its view to `points`, and has no view without them, so draws no tiles)
+      assert [[45.07, 7.69]] =
+               doc
+               |> Floki.attribute("[data-id=events_map] leaflet-map", "points")
+               |> List.first()
+               |> Jason.decode!()
+
+      # its hook sends nothing as it moves, as the events map does not load the places in view (they would replace the events)
+      assert Floki.find(doc, "[data-id=events_map] leaflet-map[live-bounds]") == []
+
+      # the map fills its box, rather than the map's default height
+      assert [class] = Floki.attribute(doc, "[data-id=events_map] [data-id=map]", "class")
+      assert class =~ "h-full"
+      refute class =~ "250px"
+
       # not saved: a new visit is in the list again
       conn
       |> visit("/events")
       |> assert_has("[data-id=event_preview][data-layout=list]")
+    end
+
+    test "with no upcoming event that has a place, the map is empty, and shows no other places",
+         %{conn: conn, me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+      # a place that no event is at
+      Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{name: "Not an Event Venue"})
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/map")
+      doc = Floki.parse_document!(html)
+
+      assert Floki.find(doc, "[data-id=events_map] leaflet-map") != []
+      assert Floki.find(doc, "[data-id=events_map] leaflet-marker") == []
+
+      assert [] =
+               doc
+               |> Floki.attribute("[data-id=events_map] leaflet-map", "points")
+               |> List.first()
+               |> Jason.decode!()
+
+      refute html =~ "Not an Event Venue"
     end
 
     test "without a maps key, the dropdown offers no map, and the map page says maps are not set up",

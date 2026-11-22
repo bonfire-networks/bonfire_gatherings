@@ -187,6 +187,8 @@
         id="events_map_component"
         markers={map_markers(@events)}
         show_activity={false}
+        fallback_places={false}
+        class="h-full"
       />
     </div>
   {#elseif @events == []}
