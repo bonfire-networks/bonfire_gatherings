@@ -32,9 +32,13 @@
       </h2>
     </LinkLive>
 
-    <p :if={host_name(@object)} data-role="event_host" class="type-meta text-muted truncate">
-      {l("By %{name}", name: host_name(@object))}
-    </p>
+    {#case host_name(@object, @activity)}
+      {#match nil}
+      {#match host}
+        <p data-role="event_host" class="type-meta text-muted truncate">
+          {l("By %{name}", name: host)}
+        </p>
+    {/case}
 
     {!-- div, not p: the icon is a block --}
     <div

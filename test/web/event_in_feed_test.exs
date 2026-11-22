@@ -85,4 +85,13 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     |> assert_has_or_open_browser("[data-id=event_preview] [data-id=event_cover]")
     |> assert_has_or_open_browser("[data-id=multimedia_list]")
   end
+
+  test "the event names its creator only where they are not the activity's subject, already shown as its author" do
+    event = %{created: %{creator_id: "ANN", creator: %{id: "ANN", profile: %{name: "Ann"}}}}
+
+    assert Bonfire.Gatherings.Web.Preview.EventLive.host_name(event, %{subject_id: "BOB"}) == "Ann"
+    refute Bonfire.Gatherings.Web.Preview.EventLive.host_name(event, %{subject_id: "ANN"})
+    # with no activity (eg. a list's row), the creator
+    assert Bonfire.Gatherings.Web.Preview.EventLive.host_name(event) == "Ann"
+  end
 end

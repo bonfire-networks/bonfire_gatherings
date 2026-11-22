@@ -48,10 +48,26 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
 
   defp timezone(object), do: e(object, :time_span, :timezone, nil)
 
-  @doc "The host's name: the activity subject, else the creator if loaded."
-  def host_name(object, activity \\ nil) do
+  # @doc "The host's name: the activity subject, else the creator if loaded."
+  # def host_name(object, activity \\ nil) do
+  #   host = e(activity, :subject, nil) || e(object, :created, :creator, nil)
+  #   e(host, :profile, :name, nil) || e(host, :character, :username, nil)
+  # end
+
+  @doc "The host's name, for a preview that shows no author (eg. a tile): the activity's subject, else the creator, whichever is loaded (no preload)."
+  def host_or_creator_name(object, activity \\ nil) do
     host = e(activity, :subject, nil) || e(object, :created, :creator, nil)
     e(host, :profile, :name, nil) || e(host, :character, :username, nil)
+  end
+
+  @doc "The creator's name, if loaded, where they are not the activity's subject (shown already as its author). Compares ids only, so needs no preload."
+  def host_name(object, activity \\ nil) do
+    creator = e(object, :created, :creator, nil)
+    creator_id = e(object, :created, :creator_id, nil) || id(creator)
+    subject_id = e(activity, :subject_id, nil) || id(e(activity, :subject, nil))
+
+    if creator_id && creator_id != subject_id,
+      do: e(creator, :profile, :name, nil) || e(creator, :character, :username, nil)
   end
 
   def place(object) do

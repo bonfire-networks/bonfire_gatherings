@@ -39,8 +39,8 @@ defmodule Bonfire.Gatherings.Web.Preview.EventRowLive do
     end
   end
 
-  @doc "The creator's name, if loaded."
-  def host_name(object), do: EventLive.host_name(object)
+  @doc "The creator's name, if loaded, where they are not the activity's subject (`EventLive.host_name/2`)."
+  def host_name(object, activity \\ nil), do: EventLive.host_name(object, activity)
 
   @doc "The host of a remote event, else nil."
   def origin(object) do

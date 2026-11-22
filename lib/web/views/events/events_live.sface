@@ -20,7 +20,7 @@
       <form data-id="events_layout" phx-change="set_layout">
         <StatelessComponent
           module={maybe_component(Bonfire.UI.Groups.GroupFilterMenusLive, @__context__)}
-          menus={layout_menus(@event_preview, @live_action)}
+          menus={layout_menus(@event_preview, @live_action, @maps_enabled)}
           form={layout_form(@event_preview, @live_action)}
         />
       </form>
@@ -152,6 +152,7 @@
   </div>
 
   {!-- the map page: the listed events' places, each popup with its name, place and link --}
+  {!-- (where maps are not set up, `MapLive` says so) --}
   {#if @live_action == :map}
     <div data-id="events_map" class="h-[70vh] rounded-box overflow-hidden border border-divider">
       <StatefulComponent

@@ -29,9 +29,13 @@
       <h1 class="type-page-title">
         {name(@object) || l("Untitled event")}
       </h1>
-      <p :if={host_name(@object, @activity)} data-role="event_host" class="type-meta text-muted">
-        {l("By %{name}", name: host_name(@object, @activity))}
-      </p>
+      {#case host_name(@object, @activity)}
+        {#match nil}
+        {#match host}
+          <p data-role="event_host" class="type-meta text-muted">
+            {l("By %{name}", name: host)}
+          </p>
+      {/case}
     </div>
 
     <div class="flex flex-col gap-3">
@@ -78,7 +82,7 @@
       {/case}
     </div>
 
-    {!-- TODO: hardcoded until RSVP exists (F4) --}
+    {!-- TODO: hardcoded until RSVP exists (F4) 
     <div data-role="event_rsvp" class="rounded-box border border-divider bg-base-100 overflow-hidden">
       <div class="flex items-center justify-between px-4 py-2.5 bg-fill border-b border-divider type-caption text-muted">
         <span>{l("Are you going?")}</span>
@@ -92,9 +96,9 @@
           <button type="button" class="btn btn-sm btn-outline border-divider">{l("Interested")}</button>
           <button type="button" class="btn btn-sm btn-outline border-divider">{l("Can't go")}</button>
         </div>
-        {!-- TODO: say who sees an answer once F4 decides --}
       </div>
     </div>
+    --}
 
     {#case summary(@object)}
       {#match nil}

@@ -244,6 +244,11 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       conn(user: tiler, account: account)
       |> visit("/events")
       |> assert_has("[data-id=event_preview][data-layout=tile]", text: "Harvest Supper")
+      # a tile shows no author, so with no place it names the host instead
+      |> assert_has("[data-id=event_preview][data-layout=tile] [data-role=event_host]",
+        text: me.profile.name
+      )
+      |> refute_has("[data-id=event_preview][data-layout=tile] [data-role=event_place]")
     end
 
     test "choosing tiles in the dropdown saves it, so the next visit is in tiles", %{
@@ -265,6 +270,8 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
 
     test "the map page shows the events' places, each with its name, place and link, and the saved view stays the list",
          %{conn: conn, me: me} do
+      # maps need a tiles key (not left to the `.env`)
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
       geo = Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{name: "The Old Barn"})
 
       event =
@@ -303,6 +310,22 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       conn
       |> visit("/events")
       |> assert_has("[data-id=event_preview][data-layout=list]")
+    end
+
+    test "without a maps key, the dropdown offers no map, and the map page says maps are not set up",
+         %{conn: conn, me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "")
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      conn
+      |> visit("/events")
+      |> assert_has("[data-id=events_layout]", text: "Tiles")
+      |> refute_has("[data-id=events_layout]", text: "Map")
+
+      conn
+      |> visit("/events/map")
+      |> assert_has("[data-id=events_map] [data-id=map_unavailable]")
+      |> refute_has("[data-id=events_map] leaflet-map")
     end
 
     test "with no choice, the configured default applies", %{conn: conn, me: me} do
@@ -419,6 +442,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     conn
     |> visit("/events")
     |> assert_path("/events/past")
+    |> assert_has("[data-id=flash_info]", text: "There are no upcoming events")
     |> assert_has("[data-id=events_empty]")
   end
 
@@ -444,6 +468,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     conn
     |> visit("/events")
     |> assert_path("/events")
+    |> refute_has("[data-id=flash_info]", text: "There are no upcoming events")
     |> assert_has("[data-id=event_preview]", text: "Harvest Supper")
     |> refute_has("[data-id=event_preview]", text: "Recent Supper")
   end

@@ -38,6 +38,7 @@
       object={@object}
       time_only={@date_in_heading}
       show_time={not @date_in_heading}
+      host={EventLive.host_or_creator_name(@object, @activity)}
     />
   </div>
 </div>

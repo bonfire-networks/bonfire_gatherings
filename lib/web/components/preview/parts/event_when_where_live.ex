@@ -10,4 +10,6 @@ defmodule Bonfire.Gatherings.Web.Preview.EventWhenWhereLive do
   prop time_only, :boolean, default: false
   # the time shown elsewhere (on the cover, in the date chip's place): the place only
   prop show_time, :boolean, default: true
+  # shown in the place's stead where there is none (eg. a tile, which shows no author)
+  prop host, :string, default: nil
 end

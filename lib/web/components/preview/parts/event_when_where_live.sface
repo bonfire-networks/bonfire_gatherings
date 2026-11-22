@@ -16,6 +16,10 @@
 
 {#case EventLive.place(@object)}
   {#match nil}
+    <div :if={@host} data-role="event_host" class="flex items-start gap-2 mt-2">
+      <#Icon iconify="ph:user-circle-fill" class="size-4 mt-0.5 shrink-0 text-muted" />
+      <span class="text-sm text-base-content truncate">{l("By %{name}", name: @host)}</span>
+    </div>
   {#match place}
     <div data-role="event_place" class="flex items-start gap-2 mt-2">
       <#Icon iconify="ph:map-pin-fill" class="size-4 mt-0.5 shrink-0 text-muted" />

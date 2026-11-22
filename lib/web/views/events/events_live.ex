@@ -10,6 +10,20 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
   alias Bonfire.Gatherings.Events
   alias Bonfire.Gatherings.Web.Preview.EventLive
 
+  declare_extension(
+    "Gatherings",
+    icon: "bi:app",
+    description: l("Organisation of events"),
+    # default_nav: [
+    #   Bonfire.Gatherings.Web.HomeLive,
+    #   Bonfire.Gatherings.Web.AboutLive
+    # ]
+    # the events page in the main nav (where `:bonfire_gatherings` is in `:ui, :default_nav_extensions`)
+    default_nav: [
+      Bonfire.Gatherings.Web.EventsLive
+    ]
+  )
+
   declare_nav_link(l("Events"),
     icon: "ph:calendar-blank-fill",
     page: "events",
@@ -50,6 +64,7 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
        selected_label_id: nil,
        label_ref: nil,
        event_preview: preview,
+       maps_enabled: maps_enabled?(),
        # tiles take the width of the right sidebar
        without_secondary_widgets: tiles?(preview),
        time: :upcoming,
@@ -232,14 +247,19 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
   # def layout_form(preview),
   #   do: Phoenix.Component.to_form(%{"layout" => if(tiles?(preview), do: "tile", else: "list")})
   # with the map too (a page of its own, not saved), checked on the map page
-  def layout_menus(preview, live_action \\ nil) do
+  # the map only where maps can be drawn (`maps_enabled?/0`)
+  def layout_menus(preview, live_action \\ nil, maps? \\ true) do
     [
       # an icon already used elsewhere, so in the compiled set (`GroupFilterMenusLive` renders it from a string)
       {:layout, "events_layout_menu", "ph:list-bullets",
-       [{"list", l("List")}, {"tile", l("Tiles")}, {"map", l("Map")}],
+       [{"list", l("List")}, {"tile", l("Tiles")}] ++ if(maps?, do: [{"map", l("Map")}], else: []),
        layout_value(preview, live_action), "list", l("Layout")}
     ]
   end
+
+  @doc "Whether the instance can draw maps (`Bonfire.Geolocate.MapLive.maps_enabled?/0`), false without geolocate."
+  def maps_enabled?,
+    do: maybe_apply(Bonfire.Geolocate.MapLive, :maps_enabled?, [], fallback_return: false) == true
 
   def layout_form(preview, live_action \\ nil),
     do: Phoenix.Component.to_form(%{"layout" => layout_value(preview, live_action)})
@@ -330,7 +350,10 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
 
     # (the map shows what it has, and an empty map, rather than going to past events)
     if time == :upcoming and socket.assigns.events == [] and socket.assigns.live_action != :map,
-      do: push_patch(socket, to: base_path <> "/past"),
+      do:
+        socket
+        |> assign_flash(:info, l("There are no upcoming events, so past events are shown."))
+        |> push_patch(to: base_path <> "/past"),
       else: socket
   end
 
