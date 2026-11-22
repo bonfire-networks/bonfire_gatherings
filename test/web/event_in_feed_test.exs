@@ -89,7 +89,9 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
   test "the event names its creator only where they are not the activity's subject, already shown as its author" do
     event = %{created: %{creator_id: "ANN", creator: %{id: "ANN", profile: %{name: "Ann"}}}}
 
-    assert Bonfire.Gatherings.Web.Preview.EventLive.host_name(event, %{subject_id: "BOB"}) == "Ann"
+    assert Bonfire.Gatherings.Web.Preview.EventLive.host_name(event, %{subject_id: "BOB"}) ==
+             "Ann"
+
     refute Bonfire.Gatherings.Web.Preview.EventLive.host_name(event, %{subject_id: "ANN"})
     # with no activity (eg. a list's row), the creator
     assert Bonfire.Gatherings.Web.Preview.EventLive.host_name(event) == "Ann"
