@@ -135,9 +135,10 @@ defmodule Bonfire.Gatherings.EventCategories do
   def as_label?(key) when is_binary(key) do
     require Bonfire.Common.Config
 
+    # without the labels extension (eg. a flavour that doesn't include it) every value is a topic, as labels go under its Events label
     key in List.wrap(
       Bonfire.Common.Config.get([Bonfire.Gatherings.Events, :categories_as_labels], [])
-    )
+    ) and Bonfire.Common.Extend.extension_enabled?(:bonfire_label)
   end
 
   @doc """

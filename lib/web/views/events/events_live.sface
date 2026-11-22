@@ -27,7 +27,7 @@
     </div>
   </div>
 
-  {!-- TODO: search, placeholder until Mayel decides --}
+  {!-- TODO: search, placeholder until Mayel decides
   <div data-id="events_search" role="search">
     <label class="input border-hair border-divider bg-base-100 flex items-center gap-2 w-full">
       <span class="sr-only">{l("Search events")}</span>
@@ -41,6 +41,33 @@
       />
     </label>
   </div>
+  --}
+  {!-- the search index's matches within the upcoming list (`Events.search/2`); no box on the past list or the map, nor without an index --}
+  <form
+    :if={@search_available and @time == :upcoming and @live_action != :map}
+    data-id="events_search"
+    role="search"
+    phx-change="search"
+    phx-submit="search"
+  >
+    <label
+      for="events_search_input"
+      class="input border-hair border-divider bg-base-100 flex items-center gap-2 w-full"
+    >
+      <span class="sr-only">{l("Search events")}</span>
+      <#Icon iconify="ph:magnifying-glass" class="size-5 shrink-0 text-muted" />
+      <input
+        id="events_search_input"
+        type="search"
+        name="search"
+        value={@search}
+        placeholder={l("Search events")}
+        autocomplete="off"
+        phx-debounce="300"
+        class="grow"
+      />
+    </label>
+  </form>
 
   {!-- the categories of the listed events (facets, as a search shows only the filters found in its results): each links to its page, which lists the events tagged with it. None on the past list for now --}
   <div

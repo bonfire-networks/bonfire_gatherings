@@ -65,6 +65,9 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
        label_ref: nil,
        event_preview: preview,
        maps_enabled: maps_enabled?(),
+       # the search box, only with a search index (`Events.search/2`), on upcoming lists
+       search_available: Events.search_available?(),
+       search: nil,
        # tiles take the width of the right sidebar
        without_secondary_widgets: tiles?(preview),
        time: :upcoming,
@@ -114,7 +117,12 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
        selected_category_id: id(category),
        category_ref: params["category_ref"],
        selected_label_id: id(label),
-       label_ref: params["label_ref"]
+       label_ref: params["label_ref"],
+       # searched only on the upcoming list, with an index
+       search:
+         if(socket.assigns.search_available and socket.assigns.live_action not in [:past, :map],
+           do: blank_to_nil(params["search"])
+         )
      )
      |> show(
        if(tag_groups != [], do: tag_groups),
@@ -339,6 +347,23 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
       else: {:noreply, socket}
   end
 
+  # a search term with its spaces trimmed, nil when there's none
+  defp blank_to_nil(term) when is_binary(term), do: Enums.filter_empty(String.trim(term), nil)
+  defp blank_to_nil(_), do: nil
+
+  # the search goes in the URL, so it can be shared and reloaded; an empty one clears it
+  def handle_event("search", %{"search" => term}, socket) do
+    {:noreply,
+     push_patch(socket,
+       to:
+         socket.assigns.base_path <>
+           case blank_to_nil(term) do
+             nil -> ""
+             term -> "?" <> URI.encode_query(%{"search" => term})
+           end
+     )}
+  end
+
   def handle_event("load_more", _params, socket) do
     {:noreply, load(socket, socket.assigns.tags, e(socket.assigns, :page_info, :end_cursor, nil))}
   end
@@ -348,13 +373,14 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
     time = if socket.assigns.live_action == :past, do: :past, else: :upcoming
     socket = assign(socket, time: time, base_path: base_path) |> load(tags) |> load_chips()
 
-    # (the map shows what it has, and an empty map, rather than going to past events)
-    if time == :upcoming and socket.assigns.events == [] and socket.assigns.live_action != :map,
-      do:
-        socket
-        |> assign_flash(:info, l("There are no upcoming events, so past events are shown."))
-        |> push_patch(to: base_path <> "/past"),
-      else: socket
+    # (the map shows what it has, and an empty map, rather than going to past events; a search with no match says so, rather than going to past events)
+    if time == :upcoming and socket.assigns.events == [] and socket.assigns.live_action != :map and
+         is_nil(socket.assigns.search),
+       do:
+         socket
+         |> assign_flash(:info, l("There are no upcoming events, so past events are shown."))
+         |> push_patch(to: base_path <> "/past"),
+       else: socket
   end
 
   # the categories of the upcoming events, as chips: counted and cached for the instance (`Events.category_facets/2`), then kept to those the viewer may see, in the background so the events show first
@@ -403,7 +429,15 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
   end
 
   defp load(socket, tags, after_cursor \\ nil) do
-    opts = [current_user: current_user(socket), tags: tags, after: after_cursor]
+    opts = [
+      current_user: current_user(socket),
+      tags: tags,
+      after: after_cursor,
+      # a search narrows the list to the index's hits (nil without an index: the whole list)
+      ids:
+        socket.assigns.search &&
+          Events.search(socket.assigns.search, current_user: current_user(socket))
+    ]
 
     %{edges: events, page_info: page_info} =
       if socket.assigns.time == :past,

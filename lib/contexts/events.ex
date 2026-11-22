@@ -76,11 +76,18 @@ defmodule Bonfire.Gatherings.Events do
     |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :time_span)
     |> where_time(time, DateTime.utc_now())
     |> maybe_tagged_with(opts[:tags])
+    |> maybe_with_ids(opts[:ids])
     |> order_by([time_span: ts, main_object: e], [{^dir, ts.has_beginning}, {^dir, e.id}])
     |> Objects.list_paginated(
       Keyword.put(opts, :cursor_fields, [{{:time_span, :has_beginning}, dir}, {:id, dir}])
     )
   end
+
+  # only these events (eg. a search's hits, `search/2`); none when the list is empty
+  defp maybe_with_ids(query, ids) when is_list(ids),
+    do: where(query, [main_object: e], e.id in ^ids)
+
+  defp maybe_with_ids(query, _), do: query
 
   defp where_time(query, :upcoming, now),
     do:
@@ -275,6 +282,20 @@ defmodule Bonfire.Gatherings.Events do
         {:ok, event}
       end
     end)
+    # indexed again once saved, with what it holds now (the index its boundary decides)
+    |> tap(fn
+      {:ok, event} ->
+        # the content and place loaded above are from before the update
+        event =
+          repo().preload(event, [:post_content, primary_geolocation: :geolocation], force: true)
+
+        maybe_apply(Bonfire.Search, :maybe_index, [event, nil, [current_user: creator]],
+          fallback_return: nil
+        )
+
+      _ ->
+        nil
+    end)
   end
 
   defp update_post_content(_event, nil), do: {:ok, nil}
@@ -305,6 +326,89 @@ defmodule Bonfire.Gatherings.Events do
     do: Bonfire.Geolocate.PrimaryGeolocations.set(event, geolocation_id)
 
   defp update_place(event, _), do: Bonfire.Geolocate.PrimaryGeolocations.remove(event)
+
+  ## search index
+
+  @doc "Whether there is a search index to ask (else `search/2` returns nil and the page offers no search)."
+  def search_available? do
+    module_enabled?(Bonfire.Search.Indexer) and
+      maybe_apply(Bonfire.Search, :adapter, [], fallback_return: nil) not in [nil, false]
+  end
+
+  @doc """
+  The ids of the events the search index finds for `term`, at most `search_limit` (config, default 100) from each index read, to pass as `ids:` to `list_upcoming/1`, which keeps its own filters, order, paging and the viewer's boundaries. Reads the public index, and the closed one too for a signed-in viewer. Returns nil when there is no search index (the page then offers no search), as `Bonfire.Classify.Categories.search_groups/2` does.
+  """
+  def search(term, opts \\ []) when is_binary(term) do
+    opts = to_options(opts)
+    limit = Bonfire.Common.Config.get([__MODULE__, :search_limit], 100)
+    indexes = if current_user_id(opts), do: ["public", "closed"], else: ["public"]
+
+    if module_enabled?(Bonfire.Search.Indexer) do
+      Enum.reduce_while(indexes, [], fn index, ids ->
+        case maybe_apply(
+               Bonfire.Search,
+               :search,
+               [
+                 term,
+                 %{index: index, raw: true, limit: limit},
+                 [],
+                 # %{"index_type" => Types.module_to_str(Event)}
+                 [index_type: Event]
+               ],
+               fallback_return: nil
+             ) do
+          %{} = result -> {:cont, ids ++ (result |> e(:hits, []) |> List.wrap() |> Enums.ids())}
+          _ -> {:halt, nil}
+        end
+      end)
+      |> then(&(&1 && Enum.uniq(&1)))
+    end
+  end
+
+  @doc "The document `Bonfire.Search` indexes for an event, under its own type: its name, summary and body, its creator, and its place. Loads only what isn't loaded yet; given a bare pointer, loads the event first, as a pointer has no place mixin."
+  def indexing_object_format(%Needle.Pointer{id: id}) when is_binary(id) do
+    case repo().get(Event, id) do
+      %Event{} = event -> indexing_object_format(event)
+      _ -> nil
+    end
+  end
+
+  def indexing_object_format(%{id: _} = event) do
+    event =
+      repo().maybe_preload(
+        event,
+        [
+          :post_content,
+          created: [creator: [:profile, :character]],
+          primary_geolocation: :geolocation
+        ],
+        false
+      )
+
+    geo = e(event, :primary_geolocation, :geolocation, nil)
+
+    %{
+      "id" => id(event),
+      "index_type" => Types.module_to_str(Event),
+      "post_content" =>
+        maybe_apply(Bonfire.Social.PostContents, :indexing_object_format, [
+          e(event, :post_content, nil)
+        ]),
+      "created" =>
+        maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [event],
+          fallback_return: nil
+        ),
+      "place" =>
+        if(geo,
+          do: %{
+            "name" => e(geo, :name, nil),
+            "mappable_address" => e(geo, :mappable_address, nil)
+          }
+        )
+    }
+  end
+
+  def indexing_object_format(_), do: nil
 
   ## incoming ActivityPub
 
