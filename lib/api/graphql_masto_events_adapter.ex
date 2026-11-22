@@ -32,7 +32,7 @@ if Application.compile_env(:bonfire_api_graphql, :modularity) != :disabled do
       Fragments
     }
 
-    @user_profile Fragments.user_profile()
+    @account_fields Fragments.account_fields()
 
     @event_fields "
   id
@@ -49,7 +49,7 @@ if Application.compile_env(:bonfire_api_graphql, :modularity) != :disabled do
   creator_id
   creator {
     ... on User {
-          #{@user_profile}
+          #{@account_fields}
         }
   }
   location {
