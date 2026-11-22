@@ -568,8 +568,9 @@ defmodule Bonfire.Gatherings.Events do
   defp ap_place([first | _]), do: ap_place(first)
   defp ap_place(%{"id" => id}), do: ap_place(id)
 
+  # only a stored `Place` (which Geolocate makes a Geolocation): a `location` that is anything else (eg. a Note) leaves the event without a place, rather than refusing it
   defp ap_place(id) when is_binary(id) do
-    with {:ok, %{pointer_id: pointer_id}} when is_binary(pointer_id) <-
+    with {:ok, %{pointer_id: pointer_id, data: %{"type" => "Place"}}} when is_binary(pointer_id) <-
            ActivityPub.Object.get_cached(ap_id: id) do
       %{geolocation_id: pointer_id}
     else
