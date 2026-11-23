@@ -256,7 +256,9 @@ if Application.compile_env(:bonfire_api_graphql, :modularity) != :disabled do
       # Virtual fields lat/long may not be populated from DB load; extract from geom
       {lat, long} =
         case geo do
-          %{geom: %Geo.Point{coordinates: {lat, long}}} -> {lat, long}
+          # %{geom: %Geo.Point{coordinates: {lat, long}}} -> {lat, long}
+          # longitude first, as `Geo.Point` stores it
+          %{geom: %Geo.Point{coordinates: {long, lat}}} -> {lat, long}
           %{lat: lat, long: long} when not is_nil(lat) -> {lat, long}
           _ -> {nil, nil}
         end

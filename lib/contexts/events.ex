@@ -58,13 +58,56 @@ defmodule Bonfire.Gatherings.Events do
   end
 
   @doc """
-  Lists the events the viewer may see that have not ended yet (happening now included: an end still ahead, or with no end a start still ahead), earliest start first, a page at a time.
+  Lists events through the feed loader (`Bonfire.Social.FeedLoader`), so the feed filters apply (`time_span`, `happening_from`, `happening_until`, `sort_by: :starts_at`, `nearby`, `tags`, `time_limit`, ...), a page at a time, as `%{edges: events, page_info: page_info}`: the events are the objects of the activities the feed returns.
+
+  `time` (`:upcoming` or `:past`) sets the defaults, which `filters` override: the side of now, and the order of the start dates (earliest first for upcoming, latest first for past). Options: those of the feed loader (`current_user`, `after`, ...), `feed_name` (`:custom` by default; `:my` for the events of the people the viewer follows and their own), and `ids` to keep to those events only (eg. a search's hits, `search/2`; none when the list is empty).
+  """
+  def list_by_feed(time, filters \\ %{}, opts \\ []) when time in [:upcoming, :past] do
+    opts = to_options(opts)
+    {ids, opts} = Keyword.pop(opts, :ids)
+
+    # the feed reads an empty list of objects as no filter at all, so a search with no hits is answered here
+    if ids == [],
+      do: %{edges: [], page_info: %Paginator.PageInfo{}},
+      else: list_by_feed_ids(time, filters, ids, opts)
+  end
+
+  defp list_by_feed_ids(time, filters, ids, opts) do
+    filters =
+      Map.merge(
+        %{
+          object_types: ["Event"],
+          time_span: if(time == :upcoming, do: :current_and_upcoming, else: :past),
+          sort_by: :starts_at,
+          sort_order: if(time == :upcoming, do: :asc, else: :desc)
+        },
+        Map.new(filters)
+      )
+      |> maybe_put_objects(ids)
+
+    {feed_name, opts} = Keyword.pop(opts, :feed_name, :custom)
+
+    %{edges: edges} = page = Bonfire.Social.FeedLoader.feed(feed_name, filters, opts)
+
+    %{page | edges: activities_to_events(edges)}
+  end
+
+  # the feed's objects are pointers to the events, and an event is a virtual with no columns of its own (just its id), so each is made from its pointer's id, in the feed's order; the mixins load by that id (the feed has already left out deleted ones and checked the viewer's boundaries)
+  defp activities_to_events(edges) do
+    for edge <- edges, id = e(edge, :activity, :object_id, nil), do: %Event{id: id}
+  end
+
+  defp maybe_put_objects(filters, ids) when is_list(ids), do: Map.put(filters, :objects, ids)
+  defp maybe_put_objects(filters, _), do: filters
+
+  @doc """
+  Lists the events the viewer may see that have not ended yet (happening now included: an end still ahead, or with no end the end of the day it starts still ahead), earliest start first, a page at a time.
 
   The time span is inner-joined (every event has one), so the order can use the index on `has_beginning`.
   """
   def list_upcoming(opts \\ []), do: list_by_time(:upcoming, opts)
 
-  @doc "Lists the events the viewer may see that have ended (the opposite of `list_upcoming/1`: an end passed, or with no end a start passed), most recent start first, a page at a time."
+  @doc "Lists the events the viewer may see that have ended (the opposite of `list_upcoming/1`: an end passed, or with no end the end of the day it starts passed), most recent start first, a page at a time."
   def list_past(opts \\ []), do: list_by_time(:past, opts)
 
   # the two differ only in which side of now, and in which direction the start date is walked (the same index either way)
@@ -73,15 +116,30 @@ defmodule Bonfire.Gatherings.Events do
     dir = if time == :upcoming, do: :asc, else: :desc
 
     query_base()
-    |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :time_span)
+    |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :object_time_span)
     |> where_time(time, DateTime.utc_now())
     |> maybe_tagged_with(opts[:tags])
     |> maybe_with_ids(opts[:ids])
-    |> order_by([time_span: ts, main_object: e], [{^dir, ts.has_beginning}, {^dir, e.id}])
+    |> order_by([object_time_span: ts, main_object: e], [{^dir, ts.has_beginning}, {^dir, e.id}])
+    # loaded with the event, which the cursor on the start date reads
+    |> preload([object_time_span: ts], time_span: ts)
+    # as `paginate:`, which the feed loader's own order options (by id, for a list with no sort) don't replace
     |> Objects.list_paginated(
-      Keyword.put(opts, :cursor_fields, [{{:time_span, :has_beginning}, dir}, {:id, dir}])
+      Keyword.put(
+        opts,
+        :paginate,
+        Keyword.merge(repo().pagination_opts(opts),
+          cursor_fields: [{{:object_time_span, :has_beginning}, dir}, {:id, dir}],
+          fetch_cursor_value_fun: &cursor_value/2
+        )
+      )
     )
   end
+
+  defp cursor_value(event, {:object_time_span, :has_beginning}),
+    do: e(event, :time_span, :has_beginning, nil)
+
+  defp cursor_value(event, field), do: Paginator.default_fetch_cursor_value(event, field)
 
   # only these events (eg. a search's hits, `search/2`); none when the list is empty
   defp maybe_with_ids(query, ids) when is_list(ids),
@@ -89,21 +147,11 @@ defmodule Bonfire.Gatherings.Events do
 
   defp maybe_with_ids(query, _), do: query
 
+  # the same conditions as the feed's time span filters (`Objects.time_span_where/2`): an event with no end lasts until the end of the day it starts
   defp where_time(query, :upcoming, now),
-    do:
-      where(
-        query,
-        [time_span: ts],
-        ts.has_end >= ^now or (is_nil(ts.has_end) and ts.has_beginning >= ^now)
-      )
+    do: where(query, ^Objects.time_span_where(:current_and_upcoming, now))
 
-  defp where_time(query, :past, now),
-    do:
-      where(
-        query,
-        [time_span: ts],
-        ts.has_end < ^now or (is_nil(ts.has_end) and ts.has_beginning < ^now)
-      )
+  defp where_time(query, :past, now), do: where(query, ^Objects.time_span_where(:past, now))
 
   @doc """
   The ids of the categories (topics, groups, labels; not hashtags) that tag the events of a list (`:upcoming` for now), most used first, at most `limit`: the facets of that list, as a search shows only the filters found in its results.
@@ -156,12 +204,62 @@ defmodule Bonfire.Gatherings.Events do
           )
       )
 
+  @doc """
+  As `category_facets/2`, but counted over the events of the user's `:my` feed (the people they follow and their own), and cached for that user, with the same expiry.
+
+  One counting query per user per expiry, run when they open My events: the feed's query gives the ids of the events, which are grouped by category in the database.
+  """
+  def category_facets_my(user, time \\ :upcoming, opts \\ []) do
+    Bonfire.Common.Cache.maybe_apply_cached(
+      &category_facets_my_without_cache/3,
+      [user, time, opts[:limit] || 20],
+      Keyword.merge(
+        [
+          cache_key: "Bonfire.Gatherings.Events.category_facets:my:#{id(user)}:#{time}",
+          expire: category_facets_expire(time)
+        ],
+        Keyword.take(opts, [:cache])
+      )
+    )
+  end
+
   @doc false
-  def category_facets_without_cache(time, limit) do
-    category_table = Bonfire.Common.Types.table_id(Bonfire.Classify.Category)
+  def category_facets_my_without_cache(user, time, limit) do
+    # the feed's own query (its filters, the viewer's follows and boundaries), with no page limit or order, left as the ids of its events
+    event_ids =
+      Bonfire.Social.FeedLoader.feed(
+        :my,
+        %{
+          object_types: ["Event"],
+          time_span: if(time == :upcoming, do: :current_and_upcoming, else: :past)
+        },
+        current_user: user,
+        return: :query,
+        query_with_deferred_join: false,
+        # the paginator returns its query when given the option itself (not the page limit, which is dropped below)
+        paginate: [limit: 1, return: :query]
+      )
+      |> exclude(:limit)
+      |> exclude(:order_by)
+      |> exclude(:select)
+      |> exclude(:preload)
+      |> select([activity: a], %{id: a.object_id})
+      |> subquery()
 
     from(main_object in Event, as: :main_object)
-    |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :time_span)
+    |> join(:inner, [main_object: e], f in ^event_ids, on: f.id == e.id, as: :my_events)
+    |> count_category_facets(time, limit)
+  end
+
+  @doc false
+  def category_facets_without_cache(time, limit),
+    do: count_category_facets(from(main_object in Event, as: :main_object), time, limit)
+
+  defp count_category_facets(events_query, time, limit) do
+    category_table = Bonfire.Common.Types.table_id(Bonfire.Classify.Category)
+
+    events_query
+    |> join(:inner, [main_object: e], ts in assoc(e, :time_span), as: :object_time_span)
     |> where_time(time, DateTime.utc_now())
     |> join(:inner, [main_object: e], t in Bonfire.Tag.Tagged, on: t.id == e.id, as: :tagged)
     |> join(:inner, [tagged: t], p in Needle.Pointer,
@@ -277,6 +375,7 @@ defmodule Bonfire.Gatherings.Events do
       with {:ok, _} <- update_post_content(event, attrs[:post_content]),
            {:ok, _} <- update_time_span(event, attrs[:time_span]),
            {:ok, _} <- update_place(event, attrs[:primary_geolocation]),
+           {:ok, _} <- update_extra_info(event, attrs[:extra_info]),
            {:ok, event} <-
              Bonfire.Tag.maybe_update_tags(creator, event, Map.take(attrs, [:hashtags, :tags])) do
         {:ok, event}
@@ -320,6 +419,30 @@ defmodule Bonfire.Gatherings.Events do
       %Bonfire.Data.Time.TimeSpan{id: event.id}
       |> Bonfire.Data.Time.TimeSpan.changeset(attrs)
       |> repo().insert()
+
+  # the links given replace the ones kept (a link not given is removed), and any other key of `info` stays; no attrs leave it as it is
+  defp update_extra_info(_event, nil), do: {:ok, nil}
+
+  defp update_extra_info(event, %{info: info}) do
+    event = repo().preload(event, :extra_info)
+    existing = e(event, :extra_info, :info, nil) || %{}
+    new_info = existing |> Map.drop(Event.url_keys()) |> Map.merge(Event.web_urls(info))
+
+    case {event.extra_info, new_info} do
+      {nil, empty} when empty == %{} ->
+        {:ok, nil}
+
+      {nil, _} ->
+        %Bonfire.Data.Identity.ExtraInfo{id: event.id}
+        |> Bonfire.Data.Identity.ExtraInfo.changeset(%{info: new_info})
+        |> repo().insert()
+
+      {extra_info, _} ->
+        extra_info
+        |> Bonfire.Data.Identity.ExtraInfo.changeset(%{info: new_info})
+        |> repo().update()
+    end
+  end
 
   # a place no longer named is removed; the geolocation itself stays
   defp update_place(event, %{geolocation_id: geolocation_id}),
@@ -554,6 +677,13 @@ defmodule Bonfire.Gatherings.Events do
     })
     # |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"]))
     # |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"], creator))
+    # the links, always given (empty when the event has none) so an Update that drops one clears it
+    |> Map.put(:extra_info, %{
+      info: %{
+        "external_participation_url" => data["externalParticipationUrl"],
+        "online_address" => data["onlineAddress"]
+      }
+    })
     |> Enums.maybe_put(:primary_geolocation, ap_place(data["location"]))
     |> Enums.maybe_put(:place, ap_place_without_id(List.wrap(data["location"]) |> List.first()))
   end

@@ -71,7 +71,8 @@ defmodule Bonfire.Gatherings.EventsTest do
 
     assert %{
              primary_geolocation: %{
-               geolocation: %{name: "Plaza of the Party", geom: %{coordinates: {45.07, 7.69}}}
+               # longitude first, as `Geo.Point` and PostGIS store it
+               geolocation: %{name: "Plaza of the Party", geom: %{coordinates: {7.69, 45.07}}}
              }
            } =
              Event |> Repo.get!(event.id) |> Repo.preload(primary_geolocation: :geolocation)
@@ -146,6 +147,151 @@ defmodule Bonfire.Gatherings.EventsTest do
     seen = ids.(page_1) ++ ids.(page_2)
     refute ended.id in seen
     refute started_no_end.id in seen
+  end
+
+  test "upcoming lists the same events in the same order, page by page, as the feed loader with the time span filters" do
+    user = fake_user!()
+    now = DateTime.utc_now()
+    at = fn hours -> DateTime.add(now, hours * 3600, :second) end
+
+    span = fn name, b, e ->
+      create!(
+        user,
+        event_attrs(%{post_content: %{name: name}, time_span: %{has_beginning: b, has_end: e}})
+      )
+    end
+
+    ended = span.("ended", at.(-72), at.(-48))
+    started_no_end = span.("started, no end", at.(-24), nil)
+    ongoing = span.("ongoing", at.(-1), at.(1))
+    later_no_end = span.("in two days, no end", at.(48), nil)
+    tomorrow = span.("tomorrow", at.(24), at.(26))
+
+    event_ids = fn %{edges: edges} -> Enum.map(edges, &(Bonfire.Common.Enums.id(&1) || &1.id)) end
+    object_ids = fn %{edges: edges} -> Enum.map(edges, & &1.activity.object_id) end
+
+    feed = fn opts ->
+      Bonfire.Social.FeedLoader.feed(
+        :custom,
+        %{
+          object_types: ["Event"],
+          time_limit: 0,
+          time_span: :current_and_upcoming,
+          sort_by: :starts_at,
+          sort_order: :asc
+        },
+        Keyword.merge([current_user: user], opts)
+      )
+    end
+
+    assert %{page_info: %{end_cursor: events_cursor}} =
+             events_1 = Events.list_upcoming(current_user: user)
+
+    assert %{page_info: %{end_cursor: feed_cursor}} = feed_1 = feed.([])
+
+    # the fixtures are really there, and in the order the page is checked against
+    assert event_ids.(events_1) == [ongoing.id, tomorrow.id]
+    assert object_ids.(feed_1) == event_ids.(events_1)
+
+    events_2 = Events.list_upcoming(current_user: user, after: events_cursor)
+    feed_2 = feed.(after: feed_cursor)
+    assert object_ids.(feed_2) == [later_no_end.id]
+    assert event_ids.(events_2) == [later_no_end.id]
+
+    refute ended.id in (object_ids.(feed_1) ++ object_ids.(feed_2))
+    refute started_no_end.id in (object_ids.(feed_1) ++ object_ids.(feed_2))
+  end
+
+  test "the feed list keeps to the given ids (a search's hits), and a search with no hits lists nothing" do
+    user = fake_user!()
+    one = create!(user)
+    two = create!(user)
+
+    ids = fn %{edges: edges} ->
+      edges |> Enum.map(&(Bonfire.Common.Enums.id(&1) || &1.id)) |> Enum.sort()
+    end
+
+    list = fn opts -> Events.list_by_feed(:upcoming, %{}, [current_user: user] ++ opts) end
+
+    # control: with no ids (no search), both are listed
+    assert ids.(list.([])) == Enum.sort([one.id, two.id])
+    assert ids.(list.(ids: [one.id])) == [one.id]
+    # the feed reads an empty list of objects as no filter, so this is the context's to say
+    assert ids.(list.(ids: [])) == []
+  end
+
+  test "the feed list makes the events from the feed's pointers, with no query of their own, and leaves out deleted ones" do
+    user = fake_user!()
+    kept = create!(user)
+    deleted = create!(user)
+
+    {:ok, agent} = Agent.start_link(fn -> [] end)
+    handler = "events-feed-queries-#{System.unique_integer()}"
+
+    :telemetry.attach(
+      handler,
+      [:bonfire, :common, :repo, :query],
+      fn _event, _measurements, meta, _ -> Agent.update(agent, &[meta.query | &1]) end,
+      nil
+    )
+
+    page = Events.list_by_feed(:upcoming, %{}, current_user: user)
+    :telemetry.detach(handler)
+    queries = Agent.get(agent, & &1)
+
+    assert [%Event{}, %Event{}] = page.edges
+    assert Enum.sort(Enum.map(page.edges, & &1.id)) == Enum.sort([kept.id, deleted.id])
+    # control: the queries were seen (the feed's own)
+    assert queries != []
+    refute Enum.any?(queries, &(&1 =~ ~s(FROM "bonfire_gatherings_event")))
+
+    assert {:ok, _} = Bonfire.Social.Objects.delete(deleted, current_user: user)
+
+    assert [%Event{id: id}] = Events.list_by_feed(:upcoming, %{}, current_user: user).edges
+    assert id == kept.id
+  end
+
+  test "the feed list has an event published long ago that is still to come, unless the viewer picks a window for when it was posted" do
+    user = fake_user!()
+
+    early =
+      create!(
+        user,
+        event_attrs(%{
+          id:
+            Bonfire.Common.DatesTimes.past(40, :day) |> Bonfire.Common.DatesTimes.generate_ulid()
+        })
+      )
+
+    recent = create!(user)
+    ids = fn page -> Enum.map(page.edges, & &1.id) end
+
+    assert Enum.sort(ids.(Events.list_by_feed(:upcoming, %{}, current_user: user))) ==
+             Enum.sort([early.id, recent.id])
+
+    assert ids.(Events.list_by_feed(:upcoming, %{time_limit: 7}, current_user: user)) == [
+             recent.id
+           ]
+  end
+
+  test "an event with no end lasts until the end of the day it starts, so it is upcoming and not past that day" do
+    user = fake_user!()
+    # midnight today (UTC, as the event has no time zone): started, and the day is not over
+    midnight = DateTime.new!(Date.utc_today(), ~T[00:00:00.000000], "Etc/UTC")
+
+    started_today =
+      create!(
+        user,
+        event_attrs(%{
+          post_content: %{name: "started today, no end"},
+          time_span: %{has_beginning: midnight, has_end: nil}
+        })
+      )
+
+    ids = fn %{edges: edges} -> Enum.map(edges, &(Bonfire.Common.Enums.id(&1) || &1.id)) end
+
+    assert started_today.id in ids.(Events.list_upcoming(current_user: user))
+    refute started_today.id in ids.(Events.list_past(current_user: user))
   end
 
   test "past lists events that have ended, most recent first" do
@@ -231,6 +377,32 @@ defmodule Bonfire.Gatherings.EventsTest do
     assert label.id in ids
   end
 
+  test "the per-user category facets are counted over the user's own feed, and cached for each user apart" do
+    a = fake_user!()
+    b = fake_user!()
+    topic_a = Bonfire.Classify.Simulate.fake_category!(a, nil, %{type: :topic, name: "Alpha"})
+    topic_b = Bonfire.Classify.Simulate.fake_category!(b, nil, %{type: :topic, name: "Beta"})
+
+    create!(a, event_attrs(%{tags: [topic_a]}))
+    create!(b, event_attrs(%{tags: [topic_b]}))
+
+    Events.category_facets_my(a, :upcoming, cache: :reset)
+    Events.category_facets_my(b, :upcoming, cache: :reset)
+
+    facets_a = Events.category_facets_my(a, :upcoming)
+    assert topic_a.id in facets_a
+    refute topic_b.id in facets_a
+
+    # not user A's cached result
+    facets_b = Events.category_facets_my(b, :upcoming)
+    assert topic_b.id in facets_b
+    refute topic_a.id in facets_b
+
+    # the instance-wide facets still count both
+    instance = Events.category_facets_without_cache(:upcoming, 20)
+    assert topic_a.id in instance and topic_b.id in instance
+  end
+
   test "the usernames of the FEP-8a8e category topics and their parent are reserved, as archived topics, until an event uses them" do
     # idempotent: the fixtures migration has already run it
     # Bonfire.Gatherings.EventCategories.reserve_topics()
@@ -277,5 +449,34 @@ defmodule Bonfire.Gatherings.EventsTest do
 
     assert Bonfire.Social.FeedLoader.feed_contains?(filtered, event, current_user: user)
     refute Bonfire.Social.FeedLoader.feed_contains?(filtered, post, current_user: user)
+  end
+
+  test "a feed loads what the event card needs, but not the links kept in extra_info (for the event's page only)" do
+    user = fake_user!()
+
+    event =
+      create!(
+        user,
+        event_attrs(%{extra_info: %{info: %{"online_address" => "https://meet.example.local/r"}}})
+      )
+
+    event_id = event.id
+
+    %{edges: edges} =
+      Bonfire.Social.FeedLoader.feed(:custom, %{object_types: ["Event"]}, current_user: user)
+
+    # the object's own preloads, which the feed's live view adds to what it loaded
+    activities =
+      Bonfire.Social.Feeds.LiveHandler.preload_activity_and_object_assocs(
+        Enum.map(edges, & &1.activity),
+        [:object],
+        current_user: user
+      )
+
+    assert %{object: object} = Enum.find(activities, &match?(%{object: %{id: ^event_id}}, &1))
+
+    # control: the card's own preloads are there
+    assert %Bonfire.Data.Social.PostContent{} = object.post_content
+    assert %Ecto.Association.NotLoaded{} = object.extra_info
   end
 end

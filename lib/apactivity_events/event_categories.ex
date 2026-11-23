@@ -10,23 +10,36 @@ defmodule Bonfire.Gatherings.EventCategories do
   """
   # for `l/1`, in the labels and the "Events" label's name
   use Bonfire.Common.Localise
+  use Bonfire.Common.E
 
-  # ordered popular-first (also drives the UI's "Browse by Category" grid order)
-  @keys ~w(
-    MUSIC ARTS FOOD_DRINK PARTY FESTIVALS COMMUNITY MEETING MOVEMENTS_POLITICS
-    SPORTS LEARNING SCIENCE_TECH FILM_MEDIA PERFORMING_VISUAL_ARTS THEATRE GAMES
-    NETWORKING BUSINESS CAUSES CLIMATE_ENVIRONMENT MEDITATION_WELLBEING
-    OUTDOORS_ADVENTURE FAMILY_EDUCATION LANGUAGE_CULTURE LGBTQ INCLUSIVE_SPACES
-    CRAFTS CREATIVE_JAM DIY_MAKER_SPACES WORKSHOPS_SKILL_SHARING FASHION_BEAUTY
-    PHOTOGRAPHY BOOK_CLUBS COMEDY PETS SPIRITUALITY_RELIGION_BELIEFS AUTO_BOAT_AIR
-  )
+  # the configured `[KEY: [name: …, icon: …], …]`, in order
+  defp categories do
+    require Bonfire.Common.Config
 
-  @doc "All known category keys, in display order."
-  def all, do: @keys
+    case Bonfire.Common.Config.get([Bonfire.Gatherings.Events, :categories], []) do
+      list when is_list(list) -> list
+      _ -> []
+    end
+  end
+
+  defp category_config(key) when is_binary(key) do
+    Enum.find_value(categories(), fn {k, config} ->
+      if to_string(k) == key, do: List.wrap(config)
+    end)
+  end
+
+  @doc "All known category keys, in display order (the configured `categories`)."
+  def all, do: for({key, _config} <- categories(), do: to_string(key))
 
   @doc "Whether a (normalised) key is part of the known vocabulary."
-  def known?(key) when is_binary(key), do: key in @keys
+  def known?(key) when is_binary(key), do: key in all()
   def known?(_), do: false
+
+  @doc "The icon configured for a category key (a name of the compiled icon set, eg. `ph:music-notes-fill`), or nil."
+  def icon(key) when is_binary(key),
+    do: category_config(key) |> then(&(&1 && Keyword.get(&1, :icon)))
+
+  def icon(_), do: nil
 
   @doc "Normalise a category value to the controlled form (UPPER_SNAKE), or nil."
   def normalize(category) when is_binary(category) do
@@ -54,6 +67,26 @@ defmodule Bonfire.Gatherings.EventCategories do
   """
   def username(key) when is_binary(key), do: String.downcase(key) <> "_events"
 
+  @doc """
+  The category value a topic is the local mirror of (by its username, if its character is loaded), or nil.
+
+      iex> Bonfire.Gatherings.EventCategories.key_of_topic(%{character: %{username: "music_events"}})
+      "MUSIC"
+
+      iex> Bonfire.Gatherings.EventCategories.key_of_topic(%{character: %{username: "jazz"}})
+      nil
+  """
+  def key_of_topic(topic) do
+    with username when is_binary(username) <- e(topic, :character, :username, nil),
+         true <- String.ends_with?(username, "_events"),
+         key = username |> String.replace_suffix("_events", "") |> String.upcase(),
+         true <- known?(key) do
+      key
+    else
+      _ -> nil
+    end
+  end
+
   @behaviour Bonfire.Common.StartupTask
 
   @doc "Startup task (`Bonfire.Common.StartupTasks`, off the boot path): reserves the topics' usernames (`reserve_topics/0`), skipped once every one is held, which one query checks. Not in tests, where it would race the database sandbox at boot: a test that needs the reservation calls `reserve_topics/0`."
@@ -74,7 +107,7 @@ defmodule Bonfire.Gatherings.EventCategories do
       Bonfire.Common.Config.get([Bonfire.Gatherings.Events, :categories_parent], nil)
 
     usernames =
-      for(key <- @keys, do: username(key)) ++
+      for(key <- all(), do: username(key)) ++
         if(is_binary(parent_username) and parent_username != "", do: [parent_username], else: [])
 
     Bonfire.Common.Repo.one(
@@ -107,7 +140,7 @@ defmodule Bonfire.Gatherings.EventCategories do
       [
         parent ++
           for(
-            key <- @keys,
+            key <- all(),
             do:
               %{name: label(key), username: username(key)}
               |> Map.merge(if(as_label?(key), do: %{type: :label}, else: %{}))
@@ -115,6 +148,28 @@ defmodule Bonfire.Gatherings.EventCategories do
       ],
       fallback_return: []
     )
+    |> seed_icons()
+  end
+
+  # the icon of each topic just made, as its own setting (`[:ui, :icon]`, scoped to it), so the chips and cards show the topic's own, which an admin can change or reset. Only for the topics made now (a username already held is skipped, as is its icon).
+  defp seed_icons(topics) do
+    by_username = Map.new(all(), &{username(&1), &1})
+
+    for topic <- topics do
+      topic = Bonfire.Common.Repo.maybe_preload(topic, :character)
+
+      with key when is_binary(key) <- by_username[e(topic, :character, :username, nil)],
+           icon when is_binary(icon) <- icon(key) do
+        Bonfire.Common.Utils.maybe_apply(
+          Bonfire.Classify.Appearance,
+          :set_icon,
+          [topic, icon, [skip_boundary_check: true]],
+          fallback_return: nil
+        )
+      end
+
+      topic
+    end
   end
 
   @doc "The id of the \"Events\" label, the parent of the labels of events (as \"Content Moderation Labels\" is of the moderation ones), under the top \"Labels\"."
@@ -134,31 +189,33 @@ defmodule Bonfire.Gatherings.EventCategories do
   end
 
   @doc """
-  Whether a value is a label (what an event is about) rather than a topic (what kind of event it is), as the instance sets it (`config :bonfire_gatherings, Bonfire.Gatherings.Events, categories_as_labels: [...]`). None by default.
+  Whether a value is a label (what an event is about) rather than a topic (what kind of event it is), as the instance sets it (`label: true` on the category in the `categories` list of the runtime config). A topic by default.
   """
   def as_label?(key) when is_binary(key) do
-    require Bonfire.Common.Config
-
     # without the labels extension (eg. a flavour that doesn't include it) every value is a topic, as labels go under its Events label
-    key in List.wrap(
-      Bonfire.Common.Config.get([Bonfire.Gatherings.Events, :categories_as_labels], [])
-    ) and Bonfire.Common.Extend.extension_enabled?(:bonfire_label)
+    (category_config(key) || [])[:label] == true and
+      Bonfire.Common.Extend.extension_enabled?(:bonfire_label)
   end
 
+  def as_label?(_), do: false
+
   @doc """
-  The value a value's topic is put under, if the instance groups them (`config :bonfire_gatherings, Bonfire.Gatherings.Events, categories_nesting: %{"ARTS" => ["THEATRE", "COMEDY"]}`), or nil: then it is under the parent topic of all of them. Flat by default.
+  The value a value's topic is put under, if the instance groups them (`parent: "ARTS"` on the category in the `categories` list of the runtime config), or nil: then it is under the parent topic of all of them. Flat by default.
   """
   def parent_key(key) when is_binary(key) do
-    require Bonfire.Common.Config
-
-    Bonfire.Common.Config.get([Bonfire.Gatherings.Events, :categories_nesting], %{})
-    |> Enum.find_value(fn {parent, children} ->
-      if key in List.wrap(children), do: to_string(parent)
-    end)
+    case (category_config(key) || [])[:parent] do
+      parent when is_binary(parent) and parent != "" -> parent
+      parent when is_atom(parent) and not is_nil(parent) -> to_string(parent)
+      _ -> nil
+    end
   end
 
+  def parent_key(_), do: nil
+
   @doc """
-  The value a category's name stands for, if it is one: the value itself in any case or spelling (`"music"`, `"food-drink"`), or its label, ignoring case (`"food & drink"`). Else nil.
+  The value a category's name stands for, if it is one: the value itself in any case or spelling (`"music"`, `"food-drink"`), or its name, ignoring case (`"food & drink"`). Else nil.
+
+  This is for ingest, where there is no viewer: a name matches in English (the source text) or in the instance's default language, never in the process locale.
 
       iex> Bonfire.Gatherings.EventCategories.key_for_name("music")
       "MUSIC"
@@ -172,11 +229,23 @@ defmodule Bonfire.Gatherings.EventCategories do
   def key_for_name(name) when is_binary(name) do
     key = normalize(name)
 
-    if key in @keys do
+    if known?(key) do
       key
     else
       wanted = name |> String.trim() |> String.downcase()
-      Enum.find(@keys, &(String.downcase(label(&1)) == wanted))
+      # the source (English) name or the instance's default language's one
+      Gettext.with_locale(
+        Bonfire.Common.Localise.Gettext,
+        Bonfire.Common.Localise.default_locale(),
+        fn ->
+          Enum.find(all(), fn key ->
+            wanted in [
+              String.downcase(source_name(key)),
+              String.downcase(label(key))
+            ]
+          end)
+        end
+      )
     end
   end
 
@@ -197,49 +266,34 @@ defmodule Bonfire.Gatherings.EventCategories do
     get_in(json, ["object", field]) || Map.get(json, field)
   end
 
-  # the labels, from `Bonfire.UI.Social.EventCategories` (which only the old `/events` page used)
-  # use Bonfire.Common.Localise
-  # (moved to the top of the module, as `events_label/0` uses `l/1` too)
-
-  @doc "Localised label for a category key (humanises unknown keys)."
-  def label("ARTS"), do: l("Arts")
-  def label("AUTO_BOAT_AIR"), do: l("Auto, Boat & Air")
-  def label("BOOK_CLUBS"), do: l("Book Clubs")
-  def label("BUSINESS"), do: l("Business")
-  def label("CAUSES"), do: l("Causes")
-  def label("CLIMATE_ENVIRONMENT"), do: l("Climate & Environment")
-  def label("COMMUNITY"), do: l("Community")
-  def label("COMEDY"), do: l("Comedy")
-  def label("CRAFTS"), do: l("Crafts")
-  def label("CREATIVE_JAM"), do: l("Creative Jam")
-  def label("DIY_MAKER_SPACES"), do: l("DIY & Maker Spaces")
-  def label("FAMILY_EDUCATION"), do: l("Family & Education")
-  def label("FASHION_BEAUTY"), do: l("Fashion & Beauty")
-  def label("FESTIVALS"), do: l("Festivals")
-  def label("FILM_MEDIA"), do: l("Film & Media")
-  def label("FOOD_DRINK"), do: l("Food & Drink")
-  def label("GAMES"), do: l("Games")
-  def label("INCLUSIVE_SPACES"), do: l("Inclusive Spaces")
-  def label("LANGUAGE_CULTURE"), do: l("Language & Culture")
-  def label("LEARNING"), do: l("Learning")
-  def label("LGBTQ"), do: l("LGBTQ")
-  def label("MEETING"), do: l("Meeting")
-  def label("MEDITATION_WELLBEING"), do: l("Meditation & Wellbeing")
-  def label("MOVEMENTS_POLITICS"), do: l("Movements & Politics")
-  def label("MUSIC"), do: l("Music")
-  def label("NETWORKING"), do: l("Networking")
-  def label("OUTDOORS_ADVENTURE"), do: l("Outdoors & Adventure")
-  def label("PARTY"), do: l("Party")
-  def label("PERFORMING_VISUAL_ARTS"), do: l("Performing & Visual Arts")
-  def label("PETS"), do: l("Pets")
-  def label("PHOTOGRAPHY"), do: l("Photography")
-  def label("SCIENCE_TECH"), do: l("Science & Tech")
-  def label("SPIRITUALITY_RELIGION_BELIEFS"), do: l("Spirituality & Beliefs")
-  def label("SPORTS"), do: l("Sports")
-  def label("THEATRE"), do: l("Theatre")
-  def label("WORKSHOPS_SKILL_SHARING"), do: l("Workshops & Skill-sharing")
-
   def label(key) when is_binary(key) do
-    key |> String.downcase() |> String.split("_") |> Enum.map_join(" ", &String.capitalize/1)
+    case category_config(key) do
+      config when is_list(config) ->
+        # the configured name is the source text (extracted from the `l()` in the runtime config, in this extension's domain), translated here for the viewer's locale, as `Bonfire.Boundaries.Verbs.verb_name/1` does
+        case Keyword.get(config, :name) do
+          name when is_binary(name) and name != "" -> localise_dynamic(name, __MODULE__)
+          _ -> humanise(key)
+        end
+
+      nil ->
+        humanise(key)
+    end
   end
+
+  # the name as configured, untranslated
+  defp source_name(key) do
+    case category_config(key) do
+      config when is_list(config) ->
+        case Keyword.get(config, :name) do
+          name when is_binary(name) and name != "" -> name
+          _ -> humanise(key)
+        end
+
+      nil ->
+        humanise(key)
+    end
+  end
+
+  defp humanise(key),
+    do: key |> String.downcase() |> String.split("_") |> Enum.map_join(" ", &String.capitalize/1)
 end

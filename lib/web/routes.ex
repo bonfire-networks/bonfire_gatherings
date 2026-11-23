@@ -34,6 +34,32 @@ defmodule Bonfire.Gatherings.Web.Routes do
         )
       end
 
+      # the events of the people I follow and my own (signed in only), upcoming and past, with the same category and label pages as the list of all events
+      scope "/", Bonfire.Gatherings.Web do
+        pipe_through(:browser)
+        pipe_through(:user_required)
+
+        live("/events/my", EventsLive, :my, as: :events)
+        live("/events/my/past", EventsLive, :my_past, as: :events)
+        live("/events/my/map", EventsLive, :my_map, as: :events)
+        live("/events/my/category/:category_ref/map", EventsLive, :my_map, as: :events)
+        live("/events/my/label/:label_ref/map", EventsLive, :my_map, as: :events)
+
+        live("/events/my/category/:category_ref/label/:label_ref/map", EventsLive, :my_map,
+          as: :events
+        )
+
+        live("/events/my/category/:category_ref", EventsLive, :my, as: :events)
+        live("/events/my/category/:category_ref/past", EventsLive, :my_past, as: :events)
+        live("/events/my/label/:label_ref", EventsLive, :my, as: :events)
+        live("/events/my/label/:label_ref/past", EventsLive, :my_past, as: :events)
+        live("/events/my/category/:category_ref/label/:label_ref", EventsLive, :my, as: :events)
+
+        live("/events/my/category/:category_ref/label/:label_ref/past", EventsLive, :my_past,
+          as: :events
+        )
+      end
+
       # pages only guests can view
       scope "/gatherings/", Bonfire.Gatherings.Web do
         pipe_through(:browser)

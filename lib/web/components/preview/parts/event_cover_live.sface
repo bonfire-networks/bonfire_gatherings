@@ -1,12 +1,33 @@
 <div class="relative">
   {#case Bonfire.Common.Media.media_url(@primary_image)}
     {#match nil}
-      <div
-        class={["flex items-center justify-center bg-base-200 border-b border-divider", @placeholder_class]}
-        aria-hidden="true"
-      >
-        <#Icon iconify="ph:calendar-blank-bold" class="size-10 text-base-content/10" />
-      </div>
+      {!-- with no image, the colour (and icon) of its main topic when it has one: a wash of the topic's swatch, else the neutral grey --}
+      {#case main_topic(@object, @exclude_category_id)}
+        {#match %{colour: colour} = topic when not is_nil(colour)}
+          <div
+            data-role="event_placeholder"
+            class={[
+              "flex items-center justify-center topic-wash border-b border-divider",
+              Bonfire.Common.Swatches.class(colour),
+              @placeholder_class
+            ]}
+            aria-hidden="true"
+          >
+            {#if topic.icon}
+              <Iconify.iconify icon={topic.icon} class="size-10 topic-ink" />
+            {#else}
+              <#Icon iconify="ph:calendar-blank-bold" class="size-10 topic-ink opacity-40" />
+            {/if}
+          </div>
+        {#match _}
+          <div
+            data-role="event_placeholder"
+            class={["flex items-center justify-center bg-base-200 border-b border-divider", @placeholder_class]}
+            aria-hidden="true"
+          >
+            <#Icon iconify="ph:calendar-blank-bold" class="size-10 text-base-content/10" />
+          </div>
+      {/case}
     {#match url}
       {!-- its primary image as the cover, as an article's --}
       <div
@@ -35,8 +56,12 @@
           {l("Event")}
         </span>
       {#match names}
-        {#for name <- names}
-          <p data-role="event_badge" class="badge badge-neutral font-medium shadow-sm">{name}</p>
+        {#for topic <- names}
+          <p data-role="event_badge" class="badge badge-neutral gap-1 font-medium shadow-sm">
+            {!-- its icon before its name, when it has one (and its settings are loaded) --}
+            <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-3.5" />
+            {topic.name}
+          </p>
         {/for}
     {/case}
   </div>

@@ -33,7 +33,15 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
   # def preloads, do: [:post_content, :time_span, primary_geolocation: [:geolocation]]
   # with its media, which `Bonfire.UI.Social.ActivityLive` splits into the cover and the rest
   def preloads,
-    do: [:post_content, :time_span, primary_geolocation: [:geolocation], files: [:media]]
+    do: [
+      :post_content,
+      :time_span,
+      primary_geolocation: [:geolocation],
+      files: [:media]
+    ]
+
+  @doc "What the event's own page loads besides `preloads/0`: its links (`extra_info`), which feeds don't show."
+  def extra_preloads, do: [:extra_info]
 
   def name(object), do: e(object, :post_content, :name, nil)
 
@@ -45,6 +53,20 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
 
   def ends(object),
     do: DatesTimes.wall_time(e(object, :time_span, :has_end, nil), timezone(object))
+
+  @doc "Where the event is booked or joined, if its organiser gave one (from `extra_info`, which is not loaded for you)."
+  def participation_url(object), do: link_url(object, "external_participation_url")
+
+  @doc "The event's online link, if it has one (from `extra_info`, which is not loaded for you)."
+  def online_address(object), do: link_url(object, "online_address")
+
+  @doc "The link to open for a place that is named by a web address (eg. `https://meet.jit.si/abc`), `nil` for any other place."
+  def place_link(place), do: Bonfire.Common.URIs.web_link(place)
+
+  # checked again as shown, though it was when stored
+  defp link_url(object, key),
+    do:
+      object |> e(:extra_info, :info, nil) |> Bonfire.Gatherings.Event.web_urls() |> Map.get(key)
 
   defp timezone(object), do: e(object, :time_span, :timezone, nil)
 

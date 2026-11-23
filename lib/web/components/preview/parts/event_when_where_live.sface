@@ -14,20 +14,44 @@
     </div>
 {/case}
 
-{#case EventLive.place(@object)}
-  {#match nil}
+{#case {EventLive.place(@object), EventLive.online_address(@object)}}
+  {#match {nil, nil}}
     <div :if={@host} data-role="event_host" class="flex items-start gap-2 mt-2">
       <#Icon iconify="ph:user-circle-fill" class="size-4 mt-0.5 shrink-0 text-muted" />
       <span class="text-sm text-base-content truncate">{l("By %{name}", name: @host)}</span>
     </div>
-  {#match place}
-    <div data-role="event_place" class="flex items-start gap-2 mt-2">
+  {#match {place, online}}
+    <div data-role="event_where" class="flex items-start gap-2 mt-2">
       <#Icon iconify="ph:map-pin-fill" class="size-4 mt-0.5 shrink-0 text-muted" />
-      <a
-        href={"https://www.openstreetmap.org/search?zoom=6&query=#{URI.encode_www_form(place)}"}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="text-sm text-base-content hover:text-primary hover:underline transition-colors"
-      >{place}</a>
+      <div class="flex flex-col min-w-0">
+        {#if place}
+          {#case EventLive.place_link(place)}
+            {#match nil}
+              <a
+                data-role="event_place"
+                href={"https://www.openstreetmap.org/search?zoom=6&query=#{URI.encode_www_form(place)}"}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-sm text-base-content hover:text-primary hover:underline transition-colors"
+              >{place}</a>
+            {#match url}
+              <a
+                data-role="event_place"
+                href={url}
+                target="_blank"
+                rel="noopener nofollow"
+                class="text-sm text-base-content hover:text-primary hover:underline transition-colors truncate"
+              >{place}</a>
+          {/case}
+        {/if}
+        <a
+          :if={online}
+          data-role="event_online"
+          href={online}
+          target="_blank"
+          rel="noopener nofollow"
+          class="text-sm text-base-content hover:text-primary hover:underline transition-colors"
+        >{l("Online")}</a>
+      </div>
     </div>
 {/case}

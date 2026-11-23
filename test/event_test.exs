@@ -80,4 +80,67 @@ defmodule Bonfire.Gatherings.EventTest do
     assert time_span.has_end == ends
     assert geolocation_id == geolocation.id
   end
+
+  describe "the links in extra_info" do
+    @begins %{has_beginning: ~U[2027-05-01 18:00:00.000000Z]}
+
+    defp info_change(extra_info) do
+      changeset = Event.changeset(%{time_span: @begins, extra_info: extra_info})
+      Ecto.Changeset.get_change(changeset, :extra_info)
+    end
+
+    test "keeps http(s) URLs, with string keys, and the other keys of info" do
+      assert %{changes: %{info: info}} =
+               info_change(%{
+                 info: %{
+                   :external_participation_url => "https://tickets.example.local/e/1",
+                   "online_address" => "http://meet.example.local/room",
+                   "other" => "kept"
+                 }
+               })
+
+      assert info == %{
+               "external_participation_url" => "https://tickets.example.local/e/1",
+               "online_address" => "http://meet.example.local/room",
+               "other" => "kept"
+             }
+    end
+
+    test "drops what is not an http(s) URL" do
+      assert %{changes: %{info: info}} =
+               info_change(%{
+                 info: %{
+                   "external_participation_url" => "javascript:alert(1)",
+                   "online_address" => "https://meet.example.local/room"
+                 }
+               })
+
+      assert info == %{"online_address" => "https://meet.example.local/room"}
+
+      # control: the same key with a valid URL alone does make the row
+      assert %{changes: %{info: %{"online_address" => "https://meet.example.local/room"}}} =
+               info_change(%{info: %{"online_address" => "https://meet.example.local/room"}})
+
+      for bad <- [
+            "javascript:alert(1)",
+            "come to the garden",
+            "ftp://files.example.local/x",
+            "https://",
+            "",
+            nil,
+            5
+          ] do
+        assert is_nil(info_change(%{info: %{"online_address" => bad}})),
+               "no extra_info for #{inspect(bad)}"
+      end
+    end
+
+    test "makes no extra_info row without any" do
+      assert is_nil(info_change(nil))
+
+      assert is_nil(
+               Ecto.Changeset.get_change(Event.changeset(%{time_span: @begins}), :extra_info)
+             )
+    end
+  end
 end

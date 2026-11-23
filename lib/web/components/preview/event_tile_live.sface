@@ -18,11 +18,14 @@
         :if={Bonfire.Gatherings.Web.Preview.EventCoverLive.badge_names(@object, @exclude_category_id) != []}
         class="flex flex-wrap gap-1 mb-2"
       >
-        {#for name <- Bonfire.Gatherings.Web.Preview.EventCoverLive.badge_names(@object, @exclude_category_id)}
+        {#for topic <- Bonfire.Gatherings.Web.Preview.EventCoverLive.badge_names(@object, @exclude_category_id)}
           <span
             data-role="event_badge"
-            class="badge badge-sm border-0 bg-white/20 text-white backdrop-blur"
-          >{name}</span>
+            class="badge badge-sm gap-1 border-0 bg-white/20 text-white backdrop-blur"
+          >
+            <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-3" />
+            {topic.name}
+          </span>
         {/for}
       </div>
       <LinkLive to={@permalink || path(@object)}>

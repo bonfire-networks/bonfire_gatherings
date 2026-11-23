@@ -1,13 +1,34 @@
 <section class="bonfire-wrapper page-panel flex flex-col gap-4 p-4">
+  {!-- all known events, or (signed in) those of the people I follow and my own; each keeps the time (upcoming or past) and the category or label being viewed --}
+  <div class="-mx-4 px-4 border-b border-divider">
+    <div role="tablist" data-role="events_tabs" class="tabs tabs-border">
+      <LinkLive
+        to={filter_path(@category_ref, @label_ref, @time, false, map_view?(@live_action))}
+        replace
+        class={"tab", "tab-active": not @my}
+        opts={role: "tab", "aria-selected": to_string(not @my)}
+      >{l("Discover")}</LinkLive>
+      <LinkLive
+        :if={current_user_id(@__context__)}
+        to={filter_path(@category_ref, @label_ref, @time, true, map_view?(@live_action))}
+        replace
+        class={"tab", "tab-active": @my}
+        opts={role: "tab", "aria-selected": to_string(@my)}
+      >{l("My events")}</LinkLive>
+    </div>
+  </div>
+
   <div class="flex items-end justify-between gap-2 -mx-4 px-4 border-b border-divider">
-    <div role="tablist" class="tabs tabs-border">
+    <div role="tablist" data-role="events_time_tabs" class="tabs tabs-border">
       <LinkLive
         to={@base_path}
         replace
         class={"tab", "tab-active": @time == :upcoming}
         opts={role: "tab", "aria-selected": to_string(@time == :upcoming)}
       >{l("Upcoming")}</LinkLive>
+      {!-- not on the map, which shows the upcoming events (the past ones through the Happening filter) --}
       <LinkLive
+        :if={not map_view?(@live_action)}
         to={@base_path <> "/past"}
         replace
         class={"tab", "tab-active": @time == :past}
@@ -16,18 +37,41 @@
     </div>
 
     <div class="flex items-center gap-1 pb-1">
+      {!-- the filters (the customize-feed widget) are in the sidebar, as on the feeds; the tile and map views have no sidebar, so this opens them here --}
+      <button
+        :if={inline_filters?(@live_action, @event_preview)}
+        type="button"
+        data-role="toggle_filters"
+        phx-click="toggle_filters"
+        aria-expanded={to_string(@filters_open)}
+        class="btn btn-sm btn-ghost"
+      >
+        <#Icon iconify="ph:sliders-horizontal" class="size-4" />
+        {l("Filters")}
+      </button>
       {!-- list, tiles, or the map (a page of its own, filtered as the list is, not saved), in the dropdown the group directory uses for its filters (`GroupFilterMenusLive`) --}
       <form data-id="events_layout" phx-change="set_layout">
         <StatelessComponent
           module={maybe_component(Bonfire.UI.Groups.GroupFilterMenusLive, @__context__)}
-          menus={layout_menus(@event_preview, @live_action, @maps_enabled)}
+          menus={layout_menus(@event_preview, @live_action, @maps_enabled && !!current_user_id(@__context__))}
           form={layout_form(@event_preview, @live_action)}
         />
       </form>
     </div>
   </div>
 
-  {!-- TODO: search, placeholder until Mayel decides
+  <div
+    :if={@filters_open and inline_filters?(@live_action, @event_preview)}
+    data-role="events_filters"
+    class="border-hair border-divider rounded-box bg-base-100 px-4 py-2"
+  >
+    <StatefulComponent
+      module={maybe_component(Bonfire.UI.Social.WidgetCustomizeFeedLive, @__context__)}
+      {...customize_props(@time, @my, @filters, map_view?(@live_action))}
+    />
+  </div>
+
+  {!-- TODO: search, placeholder until the search design is decided
   <div data-id="events_search" role="search">
     <label class="input border-hair border-divider bg-base-100 flex items-center gap-2 w-full">
       <span class="sr-only">{l("Search events")}</span>
@@ -44,7 +88,7 @@
   --}
   {!-- the search index's matches within the upcoming list (`Events.search/2`); no box on the past list or the map, nor without an index --}
   <form
-    :if={@search_available and @time == :upcoming and @live_action != :map}
+    :if={@search_available and @time == :upcoming and not map_view?(@live_action)}
     data-id="events_search"
     role="search"
     phx-change="search"
@@ -79,7 +123,7 @@
   >
     {!-- to the same list (upcoming or past) of each category --}
     <LinkLive
-      to={filter_path(nil, @label_ref, @time)}
+      to={filter_path(nil, @label_ref, @time, @my, map_view?(@live_action))}
       class={
         "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
         "border-divider bg-primary/10 text-base-content": is_nil(@selected_category_id),
@@ -109,24 +153,31 @@
       {#if subtopics != []}
         <details data-role="chip_dropdown" class="dropdown shrink-0">
           <summary class={
+            chip_swatch_class(category),
             "list-none cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
             "border-divider bg-primary/10 text-base-content":
               @selected_category_id in [id(category) | Enums.ids(subtopics)],
-            "border-divider bg-base-200/40 text-muted hover:bg-base-200 hover:text-base-content":
+            "border-divider topic-wash text-muted hover:bg-base-200 hover:text-base-content":
               @selected_category_id not in [id(category) | Enums.ids(subtopics)]
           }>
+            {!-- the topic's own icon, in its swatch's colour (was the icon of its FEP-8a8e key, from a branch per key in the icon component, now each topic's own setting):
             {#case category_of_username(e(category, :character, :username, nil))}
               {#match nil}
               {#match key}
                 <Bonfire.Gatherings.Web.EventCategoryIconLive category={key} class="size-4" colored={false} />
-            {/case}
+            {/case} --}
+            <Bonfire.Gatherings.Web.EventCategoryIconLive
+              icon={chip_icon(category)}
+              colour={chip_colour(category)}
+              class="size-4"
+            />
             {e(category, :profile, :name, nil) || e(category, :character, :username, nil)}
             <#Icon iconify="ph:caret-down-bold" class="size-3" />
           </summary>
           <ul class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow">
             {#for item <- [category | subtopics]}
               <li>
-                <LinkLive to={filter_path(chip_ref(item), @label_ref, @time)}>
+                <LinkLive to={filter_path(chip_ref(item), @label_ref, @time, @my, map_view?(@live_action))}>
                   {e(item, :profile, :name, nil) || e(item, :character, :username, nil)}
                 </LinkLive>
               </li>
@@ -135,20 +186,26 @@
         </details>
       {#else}
         <LinkLive
-          to={filter_path(chip_ref(category), @label_ref, @time)}
+          to={filter_path(chip_ref(category), @label_ref, @time, @my, map_view?(@live_action))}
           class={
+            chip_swatch_class(category),
             "shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors",
             "border-divider bg-primary/10 text-base-content": @selected_category_id == id(category),
-            "border-divider bg-base-200/40 text-muted hover:bg-base-200 hover:text-base-content":
+            "border-divider topic-wash text-muted hover:bg-base-200 hover:text-base-content":
               @selected_category_id != id(category)
           }
         >
-          {!-- the icon of its FEP-8a8e value, for the topics of those values --}
+          {!-- the topic's own icon (the topics of the FEP-8a8e categories are made with theirs), in its swatch's colour (was the icon of its FEP-8a8e key, from a branch per key in the icon component, now each topic's own setting):
           {#case category_of_username(e(category, :character, :username, nil))}
             {#match nil}
             {#match key}
               <Bonfire.Gatherings.Web.EventCategoryIconLive category={key} class="size-4" colored={false} />
-          {/case}
+          {/case} --}
+          <Bonfire.Gatherings.Web.EventCategoryIconLive
+            icon={chip_icon(category)}
+            colour={chip_colour(category)}
+            class="size-4"
+          />
           {e(category, :profile, :name, nil) || e(category, :character, :username, nil)}
         </LinkLive>
       {/if}
@@ -165,14 +222,20 @@
   >
     {#for label <- label_chips(@category_chips.result)}
       <LinkLive
-        to={filter_path(@category_ref, chip_ref(label), @time)}
+        to={filter_path(@category_ref, chip_ref(label), @time, @my, map_view?(@live_action))}
         class={
           "badge badge-sm gap-1 transition-colors",
           "badge-primary": @selected_label_id == id(label),
           "badge-ghost hover:badge-outline": @selected_label_id != id(label)
         }
       >
-        <#Icon iconify="ph:tag-fill" class="size-3" />
+        {!-- the label's own icon, else the tag --}
+        {#case chip_icon(label)}
+          {#match nil}
+            <#Icon iconify="ph:tag-fill" class="size-3" />
+          {#match icon}
+            <Iconify.iconify icon={icon} class="size-3" />
+        {/case}
         {e(label, :profile, :name, nil) || e(label, :character, :username, nil)}
       </LinkLive>
     {/for}
@@ -180,14 +243,16 @@
 
   {!-- the map page: the listed events' places, each popup with its name, place and link --}
   {!-- (where maps are not set up, `MapLive` says so) --}
-  {#if @live_action == :map}
+  {#if map_view?(@live_action)}
     <div data-id="events_map" class="h-[70vh] rounded-box overflow-hidden border border-divider">
       <StatefulComponent
         module={maybe_component(Bonfire.Geolocate.MapLive, @__context__)}
         id="events_map_component"
-        markers={map_markers(@events)}
+        markers={map_markers(@events, @selected_category_id)}
         show_activity={false}
         fallback_places={false}
+        bounds_to_parent
+        fit_bounds={@map_fit}
         class="h-full"
       />
     </div>
@@ -200,17 +265,18 @@
     </div>
   {#else}
     {!-- a heading per day (sticky, so the day stays in sight while scrolling through it), the cards under it showing only their times --}
-    {#for {day, day_events} <- by_day(@events)}
+    {#for {day, day_events} <- by_day(@events, sorted_by_start?(@time, @filters))}
       <section
         data-role="events_day_group"
-        class={"relative flex flex-col gap-3", "pl-6": not tiles?(@event_preview)}
+        class={"relative flex flex-col gap-3", "pl-6": day && not tiles?(@event_preview)}
       >
         <span
-          :if={not tiles?(@event_preview)}
+          :if={day && not tiles?(@event_preview)}
           aria-hidden="true"
           class="absolute left-1 top-8 -bottom-4 border-l border-dashed border-divider"
         />
         <h3
+          :if={day}
           data-role="events_day"
           class={
             "sticky top-0 z-10 py-2 bg-base-100/95 backdrop-blur text-sm font-bold text-base-content flex items-baseline gap-2",
@@ -231,8 +297,8 @@
           {/case}
         </h3>
         {#if tiles?(@event_preview)}
-          {!-- as tiles in a grid (`EventTileLive`, which a feed can use too, as its `custom_preview`) --}
-          <div data-id="events_grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {!-- as tiles in a grid (`EventTileLive`, which a feed can use too, as its `custom_preview`), two per row from large phones (400px wide), three from tablets (`md`, where the left sidebar is a drawer, so the tiles have the whole width) --}
+          <div data-id="events_grid" class="grid grid-cols-1 min-[350px]:grid-cols-2 md:grid-cols-3 gap-4">
             {#for event <- day_events}
               <StatelessComponent
                 module={@event_preview}

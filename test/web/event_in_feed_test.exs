@@ -86,6 +86,117 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     |> assert_has_or_open_browser("[data-id=multimedia_list]")
   end
 
+  describe "an event's page, with the links it keeps in extra_info" do
+    defp event_with!(user, info, place_name \\ nil) do
+      place =
+        if place_name do
+          geo = Bonfire.Geolocate.Simulate.fake_geolocation!(user, nil, %{name: place_name})
+          %{primary_geolocation: %{geolocation_id: geo.id}}
+        else
+          %{}
+        end
+
+      {:ok, event} =
+        Bonfire.Gatherings.Events.create(
+          current_user: user,
+          boundary: "public",
+          event_attrs:
+            Map.merge(
+              %{
+                post_content: %{name: "Harvest Supper"},
+                time_span: %{has_beginning: ~U[2030-09-20 18:00:00Z]},
+                extra_info: %{info: info}
+              },
+              place
+            )
+        )
+
+      event
+    end
+
+    test "a place named by a URL is shown as a link, a place named otherwise as a map link" do
+      account = Fake.fake_account!()
+      user = Fake.fake_user!(account)
+
+      url_event = event_with!(user, %{}, "https://meet.jit.si/abc")
+      named_event = event_with!(user, %{}, "The Old Barn")
+
+      conn(user: user, account: account)
+      |> visit("/discussion/#{url_event.id}")
+      |> wait_async()
+      |> assert_has_or_open_browser(
+        "[data-layout=page] a[data-role=event_place][href='https://meet.jit.si/abc'][target=_blank][rel='noopener nofollow']",
+        text: "https://meet.jit.si/abc"
+      )
+      |> visit("/discussion/#{named_event.id}")
+      |> wait_async()
+      |> assert_has_or_open_browser(
+        "[data-layout=page] a[data-role=event_place][href^='https://www.openstreetmap.org/search']",
+        text: "The Old Barn"
+      )
+    end
+
+    test "the place and the online link are shown together in the where line" do
+      account = Fake.fake_account!()
+      user = Fake.fake_user!(account)
+
+      event =
+        event_with!(
+          user,
+          %{"online_address" => "https://meet.example.local/room"},
+          "The Old Barn"
+        )
+
+      conn(user: user, account: account)
+      |> visit("/discussion/#{event.id}")
+      |> wait_async()
+      |> assert_has_or_open_browser("[data-layout=page] [data-role=event_where]", count: 1)
+      |> assert_has_or_open_browser(
+        "[data-role=event_where] a[data-role=event_place]",
+        text: "The Old Barn"
+      )
+      |> assert_has_or_open_browser(
+        "[data-role=event_where] a[data-role=event_online][href='https://meet.example.local/room']"
+      )
+      |> assert_has("[data-role=event_online]", count: 1)
+    end
+
+    test "links to the external participation URL and the online address" do
+      account = Fake.fake_account!()
+      user = Fake.fake_user!(account)
+
+      event =
+        event_with!(user, %{
+          "external_participation_url" => "https://tickets.example.local/e/1",
+          "online_address" => "https://meet.example.local/room"
+        })
+
+      conn(user: user, account: account)
+      |> visit("/discussion/#{event.id}")
+      |> wait_async()
+      |> assert_has_or_open_browser("[data-layout=page]", text: "Harvest Supper")
+      |> assert_has_or_open_browser(
+        "[data-layout=page] a[data-role=event_register][href='https://tickets.example.local/e/1'][target=_blank][rel='noopener nofollow']"
+      )
+      |> assert_has_or_open_browser(
+        "[data-layout=page] a[data-role=event_online][href='https://meet.example.local/room'][target=_blank][rel='noopener nofollow']"
+      )
+    end
+
+    test "shows neither link for an event without them" do
+      account = Fake.fake_account!()
+      user = Fake.fake_user!(account)
+      event = event_with!(user, %{})
+
+      conn(user: user, account: account)
+      |> visit("/discussion/#{event.id}")
+      |> wait_async()
+      |> assert_has_or_open_browser("[data-layout=page]", text: "Harvest Supper")
+      |> refute_has("[data-role=event_register]")
+      |> refute_has("[data-role=event_online]")
+    end
+  end
+
   test "the event names its creator only where they are not the activity's subject, already shown as its author" do
     event = %{created: %{creator_id: "ANN", creator: %{id: "ANN", profile: %{name: "Ann"}}}}
 

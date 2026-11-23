@@ -22,6 +22,8 @@ defmodule Bonfire.Gatherings.Web.Preview.EventCoverLive do
 
   @doc """
   What the badge names: the categories and labels among the event's tags, if they are loaded (the events page preloads them; a feed may have), less `exclude_id`. Never loads them. Hashtags (named, with no profile) are left out. Empty when none, and the badge then says "Event".
+
+  Each is `%{id: …, name: …, icon: …, colour: …, category?: …}`: the topic's icon and swatch (`Bonfire.Classify.Appearance`) where its settings are loaded, else nil, and whether it is one of the FEP-8a8e categories.
   """
   def badge_names(object, exclude_id \\ nil) do
     case e(object, :tags, nil) do
@@ -31,12 +33,28 @@ defmodule Bonfire.Gatherings.Web.Preview.EventCoverLive do
             name = e(tag, :profile, :name, nil),
             is_binary(name) and name != "",
             uniq: true,
-            do: name
+            do: %{
+              id: id(tag),
+              name: name,
+              icon: appearance(:icon, tag),
+              colour: if(appearance(:settings_loaded?, tag), do: appearance(:colour, tag)),
+              category?: Bonfire.Gatherings.EventCategories.key_of_topic(tag) != nil
+            }
 
       _not_loaded ->
         []
     end
   end
+
+  @doc "The topic that gives the card its colour and icon: the main one of those the badge names (the event's FEP-8a8e category if it has one, else the first). nil when there is none, or when the page is filtered by the only one."
+  def main_topic(object, exclude_id \\ nil) do
+    names = badge_names(object, exclude_id)
+    Enum.find(names, & &1.category?) || List.first(names)
+  end
+
+  # the topic's colour and icon, where `bonfire_classify` is there to give them
+  defp appearance(fun, tag),
+    do: maybe_apply(Bonfire.Classify.Appearance, fun, [tag], fallback_return: nil)
 
   # laid over the cover (eg. the tile's title)
   slot default

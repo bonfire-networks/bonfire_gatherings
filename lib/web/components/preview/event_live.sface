@@ -61,26 +61,79 @@
           </div>
       {/case}
 
-      {#case place(@object)}
-        {#match nil}
-        {#match place}
-          <a
-            data-role="event_place"
-            href={"https://www.openstreetmap.org/search?zoom=6&query=#{URI.encode_www_form(place)}"}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="group flex items-center gap-3"
-          >
+      {#case {place(@object), online_address(@object)}}
+        {#match {nil, nil}}
+        {#match {place, online}}
+          <div data-role="event_where" class="flex items-center gap-3">
             <span class="size-10 shrink-0 grid place-items-center rounded-box border border-divider text-muted">
-              <#Icon iconify="ph:map-pin" class="size-5" />
+              {#if place}
+                <#Icon iconify="ph:map-pin" class="size-5" />
+              {#else}
+                <#Icon iconify="ph:globe-simple" class="size-5" />
+              {/if}
             </span>
-            <span class="flex items-center gap-1 type-meta font-medium text-base-content group-hover:underline">
-              {place}
-              <#Icon iconify="ph:arrow-up-right" class="size-3.5 text-muted" />
-            </span>
-          </a>
+            <div class="flex flex-col min-w-0">
+              {#if place}
+                {#case place_link(place)}
+                  {#match nil}
+                    <a
+                      data-role="event_place"
+                      href={"https://www.openstreetmap.org/search?zoom=6&query=#{URI.encode_www_form(place)}"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="group flex items-center gap-1 type-meta font-medium text-base-content hover:underline"
+                    >
+                      {place}
+                      <#Icon iconify="ph:arrow-up-right" class="size-3.5 text-muted" />
+                    </a>
+                  {#match url}
+                    <a
+                      data-role="event_place"
+                      href={url}
+                      target="_blank"
+                      rel="noopener nofollow"
+                      class="group flex items-center gap-1 type-meta font-medium text-base-content hover:underline"
+                    >
+                      <span class="truncate">{place}</span>
+                      <#Icon iconify="ph:arrow-up-right" class="size-3.5 text-muted" />
+                    </a>
+                {/case}
+              {/if}
+              <a
+                :if={online}
+                data-role="event_online"
+                href={online}
+                target="_blank"
+                rel="noopener nofollow"
+                class={
+                  "group flex items-center gap-1 type-meta hover:underline",
+                  "font-medium text-base-content": !place,
+                  "text-muted": place
+                }
+              >
+                {l("Online")}
+                <#Icon iconify="ph:arrow-up-right" class="size-3.5 text-muted" />
+              </a>
+            </div>
+          </div>
       {/case}
     </div>
+
+    {#case participation_url(@object)}
+      {#match nil}
+      {#match url}
+        {!-- the organiser takes bookings on their own site, so there is no "Going" here --}
+        <a
+          data-role="event_register"
+          href={url}
+          target="_blank"
+          rel="noopener nofollow"
+          class="btn btn-sm border-base-content bg-base-content text-base-100 hover:opacity-90"
+        >
+          <#Icon iconify="ph:ticket" class="size-4" />
+          {l("Join on their site")}
+        </a>
+    {/case}
 
     {!-- TODO: hardcoded until RSVP exists (F4) 
     <div data-role="event_rsvp" class="rounded-box border border-divider bg-base-100 overflow-hidden">

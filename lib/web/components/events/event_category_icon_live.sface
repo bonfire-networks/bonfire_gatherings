@@ -1,3 +1,7 @@
+{#if @icon}
+  <Iconify.iconify icon={@icon} class={[@class, ink_class(@colour, @colored)]} />
+{/if}
+{!-- the icon and the colour of each of the FEP-8a8e categories were written here, one branch each, so that iconify_ex built the icons' CSS from the literals and Tailwind kept the colour classes. Now they are the topic's own settings (the names in `Bonfire.Gatherings.RuntimeConfig`), the icons built by `Bonfire.UI.Common.IconPickerLive`, and the colours in `topic_swatches.css`.
 {#case @category}
   {#match "ARTS"}<#Icon iconify="ph:palette-fill" class={[@class, @colored && "text-rose-400"]} />
   {#match "AUTO_BOAT_AIR"}<#Icon iconify="ph:car-fill" class={[@class, @colored && "text-cyan-400"]} />
@@ -37,3 +41,4 @@
   {#match "WORKSHOPS_SKILL_SHARING"}<#Icon iconify="ph:hammer-fill" class={[@class, @colored && "text-amber-400"]} />
   {#match _}<#Icon iconify="ph:tag-fill" class={[@class, @colored && "text-muted"]} />
 {/case}
+--}

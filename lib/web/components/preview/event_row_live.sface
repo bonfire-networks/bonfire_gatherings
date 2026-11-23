@@ -42,20 +42,47 @@
 
     {!-- div, not p: the icon is a block --}
     <div
-      :if={EventLive.place(@object)}
-      data-role="event_place"
+      :if={EventLive.place(@object) || EventLive.online_address(@object)}
+      data-role="event_where"
       class="flex items-center gap-1.5 type-meta text-muted min-w-0"
     >
       <#Icon iconify="ph:map-pin" class="size-4 shrink-0" />
-      <span class="truncate">{EventLive.place(@object)}</span>
+      {#if EventLive.place(@object)}
+        {#case EventLive.place_link(EventLive.place(@object))}
+          {#match nil}
+            <span data-role="event_place" class="truncate">{EventLive.place(@object)}</span>
+          {#match url}
+            <a
+              data-role="event_place"
+              href={url}
+              target="_blank"
+              rel="noopener nofollow"
+              class="truncate hover:underline"
+            >{EventLive.place(@object)}</a>
+        {/case}
+      {/if}
+      <a
+        :if={EventLive.online_address(@object)}
+        data-role="event_online"
+        href={EventLive.online_address(@object)}
+        target="_blank"
+        rel="noopener nofollow"
+        class="shrink-0 hover:underline"
+      >{l("Online")}</a>
     </div>
 
     <div
       :if={badge_names(@object, @exclude_category_id) != [] or origin(@object)}
       class="flex flex-wrap items-center gap-1.5 mt-1"
     >
-      {#for name <- badge_names(@object, @exclude_category_id)}
-        <span data-role="event_badge" class="badge badge-sm border-0 bg-fill-strong text-base-content">{name}</span>
+      {#for topic <- badge_names(@object, @exclude_category_id)}
+        <span
+          data-role="event_badge"
+          class="badge badge-sm gap-1 border-0 bg-fill-strong text-base-content"
+        >
+          <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-3" />
+          {topic.name}
+        </span>
       {/for}
 
       <span :if={origin(@object)} data-role="event_origin" class="type-caption text-muted">
@@ -66,6 +93,21 @@
 
   {#case Bonfire.Common.Media.media_url(cover(@primary_image, @object))}
     {#match nil}
+      {!-- with no image: a square in the colour (and icon) of its main topic when it has one, as the card's and the tile's placeholder; nothing otherwise --}
+      {#case EventCoverLive.main_topic(@object, @exclude_category_id)}
+        {#match %{colour: colour} = topic when not is_nil(colour)}
+          <div
+            data-role="event_placeholder"
+            class={[
+              "size-24 shrink-0 rounded-box flex items-center justify-center topic-wash",
+              Bonfire.Common.Swatches.class(colour)
+            ]}
+            aria-hidden="true"
+          >
+            <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-8 topic-ink" />
+          </div>
+        {#match _}
+      {/case}
     {#match url}
       <div
         data-id="event_cover"

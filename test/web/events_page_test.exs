@@ -55,6 +55,33 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     |> assert_has("[data-id=multimedia_list]")
   end
 
+  test "a card shows the event's online link beside its place, which a feed card does not load",
+       %{
+         conn: conn,
+         me: me
+       } do
+    geo = Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{name: "The Old Barn"})
+
+    event!(me, "Harvest Supper", hours(48), hours(50), %{
+      primary_geolocation: %{geolocation_id: geo.id},
+      extra_info: %{info: %{"online_address" => "https://meet.example.local/room"}}
+    })
+
+    conn
+    |> visit("/events")
+    |> wait_async()
+    |> assert_has("[data-id=event_preview] [data-role=event_where] [data-role=event_place]",
+      text: "The Old Barn"
+    )
+    |> assert_has(
+      "[data-id=event_preview] [data-role=event_where] a[data-role=event_online][href='https://meet.example.local/room'][target=_blank][rel='noopener nofollow']"
+    )
+    |> visit("/feed")
+    |> wait_async()
+    |> assert_has("[data-id=event_preview] [data-role=event_place]", text: "The Old Barn")
+    |> refute_has("[data-role=event_online]")
+  end
+
   test "lists the earliest start first", %{conn: conn, me: me} do
     event!(me, "Second Thing", hours(72), nil)
     event!(me, "First Thing", hours(24), nil)
@@ -251,6 +278,68 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       |> refute_has("[data-id=event_preview][data-layout=tile] [data-role=event_place]")
     end
 
+    defp place_event!(me, name, place_name, info) do
+      geo = Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{name: place_name})
+
+      event!(me, name, hours(48), nil, %{
+        primary_geolocation: %{geolocation_id: geo.id},
+        extra_info: %{info: info}
+      })
+    end
+
+    test "a list row shows a URL place as a link with the online link, a plain place as the text with none",
+         %{conn: conn, me: me} do
+      place_event!(me, "Video Call", "https://meet.jit.si/abc", %{
+        "online_address" => "https://meet.example.local/room"
+      })
+
+      place_event!(me, "Barn Dance", "The Old Barn", %{})
+
+      conn
+      |> visit("/events")
+      |> wait_async()
+      |> assert_has(
+        "[data-layout=list] [data-role=event_where] a[data-role=event_place][href='https://meet.jit.si/abc'][target=_blank][rel='noopener nofollow']"
+      )
+      |> assert_has(
+        "[data-layout=list] [data-role=event_where] a[data-role=event_online][href='https://meet.example.local/room']"
+      )
+      |> assert_has("[data-layout=list] [data-role=event_where] span[data-role=event_place]",
+        text: "The Old Barn"
+      )
+      |> assert_has("[data-layout=list] [data-role=event_online]", count: 1)
+    end
+
+    test "a tile shows the online link beside the place, and a map link with none", %{me: me} do
+      place_event!(me, "Video Call", "The Old Barn", %{
+        "online_address" => "https://meet.example.local/room"
+      })
+
+      place_event!(me, "Barn Dance", "The Old Mill", %{})
+      account = fake_account!()
+
+      tiler =
+        Bonfire.Common.Utils.current_user(
+          Bonfire.Common.Settings.put(
+            [Bonfire.Gatherings.Events, :custom_preview],
+            Bonfire.Gatherings.Web.Preview.EventTileLive,
+            current_user: fake_user!(account)
+          )
+        )
+
+      conn(user: tiler, account: account)
+      |> visit("/events")
+      |> wait_async()
+      |> assert_has(
+        "[data-layout=tile] [data-role=event_where] a[data-role=event_online][href='https://meet.example.local/room'][target=_blank][rel='noopener nofollow']"
+      )
+      |> assert_has(
+        "[data-layout=tile] a[data-role=event_place][href^='https://www.openstreetmap.org/search']",
+        text: "The Old Mill"
+      )
+      |> assert_has("[data-layout=tile] [data-role=event_online]", count: 1)
+    end
+
     test "choosing tiles in the dropdown saves it, so the next visit is in tiles", %{
       conn: conn,
       me: me
@@ -272,6 +361,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
          %{conn: conn, me: me} do
       # maps need a tiles key (not left to the `.env`)
       Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+
       geo =
         Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{
           name: "The Old Barn",
@@ -298,6 +388,8 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       |> visit("/events")
       |> within("[data-id=events_layout]", &choose(&1, "Map"))
       |> assert_path("/events/map")
+      # the map takes the right sidebar's width, as tiles do
+      |> refute_has("#widgets-drawer")
 
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/map")
 
@@ -334,6 +426,34 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       |> assert_has("[data-id=event_preview][data-layout=list]")
     end
 
+    test "the layout dropdown offers the map to signed-in users, not to guests", %{
+      conn: conn,
+      me: me
+    } do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      conn
+      |> visit("/events")
+      |> assert_has("[data-id=events_layout]", text: "Map")
+
+      conn()
+      |> visit("/events")
+      |> assert_has("[data-id=events_layout]", text: "Tiles")
+      |> refute_has("[data-id=events_layout]", text: "Map")
+    end
+
+    test "a guest is asked to sign in to see the events map, and gets no map", %{me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn(), "/events/map")
+      doc = Floki.parse_document!(html)
+
+      assert [_] = Floki.find(doc, "[data-id=events_map] [data-id=map_signed_out]")
+      assert Floki.find(doc, "[data-id=events_map] leaflet-map") == []
+    end
+
     test "with no upcoming event that has a place, the map is empty, and shows no other places",
          %{conn: conn, me: me} do
       Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
@@ -356,10 +476,27 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       refute html =~ "Not an Event Venue"
     end
 
-    test "without a maps key, the dropdown offers no map, and the map page says maps are not set up",
+    test "without a Mapbox key, maps come from the styles' server; without either, the dropdown offers no map, and the map page says maps are not set up",
          %{conn: conn, me: me} do
       Process.put([:bonfire, :js_config, :mapbox_api_key], "")
       event!(me, "Harvest Supper", hours(48), nil)
+
+      # the styles' server (eg. OpenFreeMap) is enough
+      Process.put(
+        [:bonfire_geolocate, Bonfire.Geolocate, :map_styles_url],
+        "https://tiles.example.local/styles/"
+      )
+
+      conn
+      |> visit("/events")
+      |> assert_has("[data-id=events_layout]", text: "Map")
+
+      conn
+      |> visit("/events/map")
+      |> assert_has("[data-id=events_map] leaflet-map")
+
+      # neither
+      Process.put([:bonfire_geolocate, Bonfire.Geolocate, :map_styles_url], "")
 
       conn
       |> visit("/events")
@@ -515,5 +652,671 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     |> refute_has("[data-id=flash_info]", text: "There are no upcoming events")
     |> assert_has("[data-id=event_preview]", text: "Harvest Supper")
     |> refute_has("[data-id=event_preview]", text: "Recent Supper")
+  end
+
+  test "a stranger is not shown an event made for mentioned people only; its creator is", %{
+    conn: conn,
+    me: me
+  } do
+    {:ok, _} =
+      Events.create(
+        current_user: me,
+        boundary: "mentions",
+        event_attrs: %{
+          post_content: %{name: "Secret Supper"},
+          time_span: %{has_beginning: hours(24), has_end: nil}
+        }
+      )
+
+    event!(me, "Open Supper", hours(48), nil)
+
+    account = fake_account!()
+    stranger = fake_user!(account)
+
+    # control: the creator sees both
+    conn
+    |> visit("/events")
+    |> assert_has("[data-id=event_preview]", text: "Secret Supper")
+    |> assert_has("[data-id=event_preview]", text: "Open Supper")
+
+    conn(user: stranger, account: account)
+    |> visit("/events")
+    |> assert_has("[data-id=event_preview]", text: "Open Supper")
+    |> refute_has("[data-id=event_preview]", text: "Secret Supper")
+  end
+
+  test "load more lists the events after the first page, once each, in the order of their start dates",
+       %{conn: conn, me: me} do
+    # pages hold 2 in tests; created out of order, so the order of the start dates is not the order of the ids
+    event!(me, "Third Thing", hours(72), nil)
+    event!(me, "Fifth Thing", hours(120), nil)
+    event!(me, "First Thing", hours(24), nil)
+    event!(me, "Fourth Thing", hours(96), nil)
+    event!(me, "Second Thing", hours(48), nil)
+
+    {:ok, view, html} = Phoenix.LiveViewTest.live(conn, "/events")
+    assert [_, after_first] = String.split(html, "First Thing", parts: 2)
+    assert after_first =~ "Second Thing"
+    refute html =~ "Third Thing"
+
+    view
+    |> Phoenix.LiveViewTest.element("button", "Load more")
+    |> Phoenix.LiveViewTest.render_click()
+
+    view
+    |> Phoenix.LiveViewTest.element("button", "Load more")
+    |> Phoenix.LiveViewTest.render_click()
+
+    html = Phoenix.LiveViewTest.render(view)
+    names = Regex.scan(~r/(First|Second|Third|Fourth|Fifth) Thing/, html)
+
+    assert names |> Enum.map(&hd/1) |> Enum.uniq() ==
+             ["First Thing", "Second Thing", "Third Thing", "Fourth Thing", "Fifth Thing"]
+
+    assert html |> Floki.parse_document!() |> Floki.find("[data-id=event_preview]") |> length() ==
+             5
+  end
+
+  describe "feed filters" do
+    # the list view's filters are the customize-feed widget in the sidebar, as on the feeds: its "More filters" opens the editor
+    defp open_filters(session) do
+      session
+      |> wait_async()
+      |> click_button("[data-role=open_modal]", "More filters")
+    end
+
+    # the tile and map views have no sidebar: a Filters button opens the same widget inline
+    defp open_inline_filters(session) do
+      session
+      |> wait_async()
+      |> click_button("[data-role=toggle_filters]", "Filters")
+      |> click_button("[data-role=events_filters] [data-role=open_modal]", "More filters")
+    end
+
+    defp apply_filters(session) do
+      session
+      |> click_button("Apply filters")
+      |> wait_async()
+    end
+
+    test "the list view has the customize-feed widget in the sidebar and no Filters button, with the rows that cannot change a list of events hidden",
+         %{conn: conn, me: me} do
+      event!(me, "Harvest Supper", hours(48), hours(50))
+
+      conn
+      |> visit("/events")
+      # control: the page lists
+      |> assert_has("[data-id=event_preview]", text: "Harvest Supper")
+      |> assert_has("[data-role=feed_preferences_widget]")
+      |> refute_has("[data-role=toggle_filters]")
+      # events are not replies, nor group activities, but they are shared as boosts
+      |> refute_has("[data-role=feed_override_toggle][name='scope[group_activity]']")
+      |> refute_has("[data-role=feed_override_toggle][name='scope[replies]']")
+      |> assert_has("[data-role=feed_override_toggle][name='scope[boosts]']")
+      # Happening and Nearby are above "More filters", and not in it
+      |> assert_has("[data-role=feed_top_filters] [data-row=happening]")
+      |> assert_has("[data-role=feed_top_filters] [data-row=nearby]")
+      |> open_filters()
+      |> refute_has("[data-role=feed_advanced_filters_wrapper] [data-row=happening]")
+      |> refute_has("[data-role=feed_advanced_filters_wrapper] [data-row=nearby]")
+      |> assert_has("[data-role=feed_advanced_filters_wrapper] [data-row=time_range]")
+      |> refute_has("[data-row=object_types]")
+      |> refute_has("[data-row=activity_types]")
+      |> refute_has("[data-row=media_types]")
+    end
+
+    test "choosing a value in the Happening row above \"More filters\" narrows the list at once, with no Apply",
+         %{conn: conn, me: me} do
+      event!(me, "Running Fair", hours(-1), hours(1))
+      event!(me, "Later Supper", hours(48), hours(50))
+
+      conn
+      |> visit("/events")
+      |> wait_async()
+      # control: both are listed before choosing
+      |> assert_has("[data-id=event_preview]", text: "Running Fair")
+      |> assert_has("[data-id=event_preview]", text: "Later Supper")
+      |> refute_has("[data-role=feed_top_filters] [data-role=apply_filters]")
+      |> unwrap(fn view ->
+        view
+        |> Phoenix.LiveViewTest.element(
+          "[data-role=feed_top_filters] [data-row=happening] form[phx-change]"
+        )
+        |> Phoenix.LiveViewTest.render_change(%{"happening" => "current"})
+      end)
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "Running Fair")
+      |> refute_has("[data-id=event_preview]", text: "Later Supper")
+    end
+
+    test "the Happening and Nearby rows are above \"More filters\" in the tile view too, with the Nearby row's location hook and place input",
+         %{conn: conn, me: me} do
+      event!(me, "Harvest Supper", hours(48), hours(50))
+
+      conn
+      |> visit("/events")
+      |> within("[data-id=events_layout]", &choose(&1, "Tiles"))
+      |> assert_has("[data-id=event_preview][data-layout=tile]", text: "Harvest Supper")
+      |> wait_async()
+      |> click_button("[data-role=toggle_filters]", "Filters")
+      |> assert_has(
+        "[data-role=events_filters] [data-role=feed_top_filters] [data-row=happening]"
+      )
+      |> assert_has("[data-role=events_filters] [data-role=feed_top_filters] [data-row=nearby]")
+      |> assert_has("[data-row=nearby] [data-role=detect_location]")
+      |> assert_has("[data-row=nearby] input[name=place]")
+      |> assert_has("[data-row=nearby] [phx-hook]")
+      |> click_button("[data-role=events_filters] [data-role=open_modal]", "More filters")
+      |> refute_has("[data-role=feed_advanced_filters_wrapper] [data-row=happening]")
+      |> refute_has("[data-role=feed_advanced_filters_wrapper] [data-row=nearby]")
+    end
+
+    test "the tile view has a Filters button that opens the same widget inline, and its Nearby row narrows the list",
+         %{conn: conn, me: me} do
+      {:ok, _} =
+        Bonfire.Common.Settings.put([Bonfire.Geolocate, :location], "50.432,-3.684",
+          current_user: me,
+          scope: :user
+        )
+
+      event!(me, "Near Barn", hours(24), nil, %{
+        place: %{name: "The Barn", lat: 50.45, long: -3.684}
+      })
+
+      event!(me, "Far Moor", hours(48), nil, %{
+        place: %{name: "The Moor", lat: 50.88, long: -3.684}
+      })
+
+      conn
+      |> visit("/events")
+      # chosen in the layout dropdown, which saves it (as the viewer's other settings stay)
+      |> within("[data-id=events_layout]", &choose(&1, "Tiles"))
+      |> assert_has("[data-id=event_preview][data-layout=tile]", text: "Far Moor")
+      |> refute_has("[data-role=feed_preferences_widget]")
+      |> open_inline_filters()
+      |> assert_has("[data-role=events_filters] [data-role=feed_preferences_widget]")
+      |> unwrap(fn view ->
+        view
+        |> Phoenix.LiveViewTest.element("[data-row=nearby] form[phx-change]")
+        |> Phoenix.LiveViewTest.render_change(%{"radius" => "10", "include_no_place" => "true"})
+      end)
+      |> apply_filters()
+      |> assert_has("[data-id=event_preview]", text: "Near Barn")
+      |> refute_has("[data-id=event_preview]", text: "Far Moor")
+    end
+
+    test "the map view has a Filters button, and a radius leaves the near event's marker and drops the far one",
+         %{conn: conn, me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+
+      {:ok, _} =
+        Bonfire.Common.Settings.put([Bonfire.Geolocate, :location], "50.432,-3.684",
+          current_user: me,
+          scope: :user
+        )
+
+      event!(me, "Near Barn", hours(24), nil, %{
+        place: %{name: "The Barn", lat: 50.45, long: -3.684}
+      })
+
+      event!(me, "Far Moor", hours(48), nil, %{
+        place: %{name: "The Moor", lat: 50.88, long: -3.684}
+      })
+
+      markers = fn session ->
+        session
+        |> unwrap(fn view ->
+          html = Phoenix.LiveViewTest.render(view)
+          send(self(), {:markers, marker_popups(html)})
+          html
+        end)
+        |> then(fn session ->
+          assert_received {:markers, popups}
+          {session, popups}
+        end)
+      end
+
+      {session, popups} = conn |> visit("/events/map") |> wait_async() |> markers.()
+      # control: both are on the map before choosing
+      assert popups =~ "Near Barn"
+      assert popups =~ "Far Moor"
+
+      {_session, popups} =
+        session
+        |> open_inline_filters()
+        |> unwrap(fn view ->
+          view
+          |> Phoenix.LiveViewTest.element("[data-row=nearby] form[phx-change]")
+          |> Phoenix.LiveViewTest.render_change(%{"radius" => "10", "include_no_place" => "true"})
+        end)
+        |> apply_filters()
+        |> markers.()
+
+      assert popups =~ "Near Barn"
+      refute popups =~ "Far Moor"
+    end
+
+    defp marker_popups(html) do
+      html
+      |> Floki.parse_document!()
+      |> Floki.find("[data-id=events_map] leaflet-marker")
+      |> Enum.flat_map(&Floki.attribute(&1, "popup"))
+      |> Enum.join(" ")
+    end
+
+    test "the map view shows no Past tab; the list and tile views do", %{conn: conn, me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      conn
+      |> visit("/events")
+      |> assert_has("[data-role=events_time_tabs] [role=tab]", text: "Past")
+
+      conn
+      |> visit("/events/map")
+      |> assert_has("[data-role=events_time_tabs] [role=tab]", text: "Upcoming")
+      |> refute_has("[data-role=events_time_tabs] [role=tab]", text: "Past")
+    end
+
+    test "choosing a radius in the Nearby row lists only the events within it, with the ones with no place; a far one comes back with a wider radius",
+         %{conn: conn, me: me} do
+      # Totnes, saved as the viewer's location
+      {:ok, _} =
+        Bonfire.Common.Settings.put([Bonfire.Geolocate, :location], "50.432,-3.684",
+          current_user: me,
+          scope: :user
+        )
+
+      # about 2 km and about 50 km north
+      event!(me, "Near Barn", hours(24), nil, %{
+        place: %{name: "The Barn", lat: 50.45, long: -3.684}
+      })
+
+      event!(me, "Far Moor", hours(48), nil, %{
+        place: %{name: "The Moor", lat: 50.88, long: -3.684}
+      })
+
+      choose_radius = fn session, radius ->
+        session
+        |> unwrap(fn view ->
+          view
+          |> Phoenix.LiveViewTest.element("[data-row=nearby] form[phx-change]")
+          |> Phoenix.LiveViewTest.render_change(%{
+            "radius" => radius,
+            "include_no_place" => "true"
+          })
+        end)
+        |> apply_filters()
+      end
+
+      conn
+      |> visit("/events")
+      # control: both are listed before choosing
+      |> assert_has("[data-id=event_preview]", text: "Near Barn")
+      |> assert_has("[data-id=event_preview]", text: "Far Moor")
+      |> open_filters()
+      |> choose_radius.("10")
+      |> assert_has("[data-id=event_preview]", text: "Near Barn")
+      |> refute_has("[data-id=event_preview]", text: "Far Moor")
+      |> choose_radius.("60")
+      |> assert_has("[data-id=event_preview]", text: "Near Barn")
+      |> assert_has("[data-id=event_preview]", text: "Far Moor")
+    end
+
+    test "the sort row offers Soonest first, which is the page's own order: the day headings show with it, and not with another sort",
+         %{conn: conn, me: me} do
+      event!(me, "Second Thing", hours(72), nil)
+      event!(me, "First Thing", hours(24), nil)
+
+      conn
+      |> visit("/events")
+      |> wait_async()
+      |> assert_has("select[name=feed_order] option[value=starts_at][selected]",
+        text: "Soonest first"
+      )
+      |> assert_has("[data-role=events_day]")
+      |> select("Sort", option: "Newest first")
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "First Thing")
+      |> assert_has("[data-id=event_preview]", text: "Second Thing")
+      |> refute_has("[data-role=events_day]")
+      |> select("Sort", option: "Soonest first")
+      |> wait_async()
+      |> assert_has("[data-role=events_day]")
+    end
+
+    test "the map's filters have no sort row, and its markers stay in start order whatever sort is sent; the list's sidebar keeps the row",
+         %{conn: conn, me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+
+      geo =
+        Bonfire.Geolocate.Simulate.fake_geolocation!(me, nil, %{
+          name: "The Barn",
+          lat: 45.07,
+          long: 7.69
+        })
+
+      place = %{primary_geolocation: %{geolocation_id: geo.id}}
+      event!(me, "Second Thing", hours(72), nil, place)
+      event!(me, "First Thing", hours(24), nil, place)
+
+      conn
+      |> visit("/events")
+      |> wait_async()
+      |> assert_has("[data-role=feed_preferences_widget] select[name=feed_order]")
+
+      conn
+      |> visit("/events/map")
+      |> wait_async()
+      |> open_inline_filters()
+      |> assert_has("[data-role=events_filters] [data-role=feed_preferences_widget]")
+      |> refute_has("select[name=feed_order]")
+
+      {:ok, view, _html} = Phoenix.LiveViewTest.live(conn, "/events/map")
+      html = Phoenix.LiveViewTest.render_hook(view, "set_feed_order", %{"feed_order" => "oldest"})
+
+      # (created in the other order, so a sort by creation would put Second Thing first)
+      popups =
+        html
+        |> Floki.parse_document!()
+        |> Floki.find("[data-id=events_map] leaflet-marker")
+        |> Enum.flat_map(&Floki.attribute(&1, "popup"))
+
+      assert [first, second] = popups
+      assert first =~ "First Thing"
+      assert second =~ "Second Thing"
+    end
+  end
+
+  describe "my events" do
+    defp other_user!, do: fake_user!(fake_account!())
+
+    defp follow!(me, other), do: {:ok, _} = Bonfire.Social.Graph.Follows.follow(me, other)
+
+    defp tab_labels(html, row) do
+      html
+      |> Floki.parse_document!()
+      |> Floki.find("[data-role=#{row}] [role=tab]")
+      |> Enum.map(&(&1 |> Floki.text() |> String.trim()))
+    end
+
+    test "the top tabs are Discover and My events, and the second row Upcoming and Past; guests get no My events, and are sent to sign in from its page",
+         %{conn: conn, me: me} do
+      # an upcoming event, so Discover stays on its upcoming list
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events")
+      assert tab_labels(html, "events_tabs") == ["Discover", "My events"]
+      assert tab_labels(html, "events_time_tabs") == ["Upcoming", "Past"]
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/my/past")
+      assert tab_labels(html, "events_tabs") == ["Discover", "My events"]
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn(), "/events")
+      assert tab_labels(html, "events_tabs") == ["Discover"]
+      assert tab_labels(html, "events_time_tabs") == ["Upcoming", "Past"]
+
+      guest_status = conn() |> Phoenix.ConnTest.get("/events/my") |> Map.fetch!(:status)
+      assert guest_status in [301, 302]
+    end
+
+    test "on the map, the tabs keep the map (Discover and My events, Upcoming), and the map has no Past tab",
+         %{conn: conn, me: me} do
+      Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
+      event!(me, "Harvest Supper", hours(48), nil)
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/map")
+      assert tab_labels(html, "events_time_tabs") == ["Upcoming"]
+
+      conn
+      |> visit("/events/map")
+      |> click_link("[data-role=events_tabs] a", "My events")
+      |> assert_path("/events/my/map")
+      |> click_link("[data-role=events_tabs] a", "Discover")
+      |> assert_path("/events/map")
+      |> click_link("[data-role=events_time_tabs] a", "Upcoming")
+      |> assert_path("/events/map")
+
+      # control: on the list view the same links do not end in /map
+      conn
+      |> visit("/events")
+      |> assert_has("[data-role=events_tabs] a[href='/events/my']")
+      |> refute_has("[data-role=events_tabs] a[href$='/map']")
+      |> refute_has("[data-role=events_time_tabs] a[href$='/map']")
+
+      conn
+      |> visit("/events/map")
+      |> assert_has("[data-role=events_tabs] a[href='/events/my/map']")
+      |> assert_has("[data-role=events_time_tabs] a[href='/events/map']")
+    end
+
+    test "lists the upcoming events of people I follow and my own, not those of a stranger (which Discover lists)",
+         %{conn: conn, me: me} do
+      friend = other_user!()
+      stranger = other_user!()
+      follow!(me, friend)
+
+      event!(friend, "Friend Gathering", hours(24), nil)
+      event!(me, "My Own Gathering", hours(48), nil)
+      event!(stranger, "Stranger Gathering", hours(30), nil)
+
+      # control: discover lists all three
+      conn
+      |> visit("/events")
+      |> assert_has("[data-id=event_preview]", text: "Stranger Gathering")
+      |> assert_has("[data-id=event_preview]", text: "Friend Gathering")
+
+      conn
+      |> visit("/events/my")
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "Friend Gathering")
+      |> assert_has("[data-id=event_preview]", text: "My Own Gathering")
+      |> refute_has("[data-id=event_preview]", text: "Stranger Gathering")
+      |> assert_has("[data-role=events_day]")
+    end
+
+    test "the category chips on My events are those of my own list: a stranger's category is a chip on Discover only, a followed person's on both",
+         %{conn: conn, me: me} do
+      friend = other_user!()
+      stranger = other_user!()
+      follow!(me, friend)
+
+      strangers_topic = fake_category!(stranger, nil, %{type: :topic, name: "Strangerjazz"})
+      friends_topic = fake_category!(friend, nil, %{type: :topic, name: "Friendpottery"})
+
+      event!(stranger, "Stranger Gig", hours(30), nil, %{tags: [strangers_topic]})
+      event!(friend, "Friend Class", hours(24), nil, %{tags: [friends_topic]})
+
+      # the chips are cached, so not from an earlier test's events
+      Events.category_facets(:upcoming, cache: :reset)
+      Events.category_facets_my(me, :upcoming, cache: :reset)
+
+      # positive first: Discover has the stranger's category
+      conn
+      |> visit("/events")
+      |> wait_async()
+      |> assert_has("[data-id=events_categories] a", text: "Strangerjazz")
+      |> assert_has("[data-id=events_categories] a", text: "Friendpottery")
+
+      conn
+      |> visit("/events/my")
+      |> wait_async()
+      |> assert_has("[data-id=events_categories] a", text: "Friendpottery")
+      |> refute_has("[data-id=events_categories] a", text: "Strangerjazz")
+    end
+
+    test "/events/my/past lists my past events and those of people I follow, not upcoming ones or a stranger's",
+         %{conn: conn, me: me} do
+      friend = other_user!()
+      stranger = other_user!()
+      follow!(me, friend)
+
+      event!(friend, "Friend Old Fair", hours(-72), hours(-70))
+      event!(me, "My Old Fair", hours(-96), hours(-94))
+      event!(stranger, "Stranger Old Fair", hours(-48), hours(-46))
+      event!(me, "My Next Fair", hours(48), nil)
+
+      conn
+      |> visit("/events/past")
+      |> assert_has("[data-id=event_preview]", text: "Stranger Old Fair")
+
+      conn
+      |> visit("/events/my/past")
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "Friend Old Fair")
+      |> assert_has("[data-id=event_preview]", text: "My Old Fair")
+      |> refute_has("[data-id=event_preview]", text: "Stranger Old Fair")
+      |> refute_has("[data-id=event_preview]", text: "My Next Fair")
+    end
+
+    test "with no upcoming events, My events says so and stays, where Discover goes to the past ones",
+         %{conn: conn, me: me} do
+      event!(me, "My Old Fair", hours(-96), hours(-94))
+
+      conn
+      |> visit("/events/my")
+      |> wait_async()
+      |> assert_path("/events/my")
+      |> assert_has("[data-id=events_empty]", text: "No upcoming events")
+
+      # control: Discover, with no upcoming events, goes to the past ones
+      conn
+      |> visit("/events")
+      |> assert_path("/events/past")
+    end
+
+    test "load more on My events lists the events after the first page, once each, in the order of their start dates",
+         %{conn: conn, me: me} do
+      friend = other_user!()
+      follow!(me, friend)
+
+      event!(friend, "Third Thing", hours(72), nil)
+      event!(me, "Fifth Thing", hours(120), nil)
+      event!(friend, "First Thing", hours(24), nil)
+      event!(me, "Fourth Thing", hours(96), nil)
+      event!(friend, "Second Thing", hours(48), nil)
+
+      {:ok, view, html} = Phoenix.LiveViewTest.live(conn, "/events/my")
+      assert [_, after_first] = String.split(html, "First Thing", parts: 2)
+      assert after_first =~ "Second Thing"
+      refute html =~ "Third Thing"
+
+      for _ <- 1..2,
+          do:
+            view
+            |> Phoenix.LiveViewTest.element("button", "Load more")
+            |> Phoenix.LiveViewTest.render_click()
+
+      html = Phoenix.LiveViewTest.render(view)
+      names = Regex.scan(~r/(First|Second|Third|Fourth|Fifth) Thing/, html)
+
+      assert names |> Enum.map(&hd/1) |> Enum.uniq() ==
+               ["First Thing", "Second Thing", "Third Thing", "Fourth Thing", "Fifth Thing"]
+
+      assert html |> Floki.parse_document!() |> Floki.find("[data-id=event_preview]") |> length() ==
+               5
+    end
+
+    test "the Filters panel works on My events: a radius lists only the events within it", %{
+      conn: conn,
+      me: me
+    } do
+      {:ok, _} =
+        Bonfire.Common.Settings.put([Bonfire.Geolocate, :location], "50.432,-3.684",
+          current_user: me,
+          scope: :user
+        )
+
+      friend = other_user!()
+      follow!(me, friend)
+
+      event!(friend, "Near Barn", hours(24), nil, %{
+        place: %{name: "The Barn", lat: 50.45, long: -3.684}
+      })
+
+      event!(me, "Far Moor", hours(48), nil, %{
+        place: %{name: "The Moor", lat: 50.88, long: -3.684}
+      })
+
+      conn
+      |> visit("/events/my")
+      |> assert_has("[data-id=event_preview]", text: "Near Barn")
+      |> assert_has("[data-id=event_preview]", text: "Far Moor")
+      |> open_filters()
+      |> unwrap(fn view ->
+        view
+        |> Phoenix.LiveViewTest.element("[data-row=nearby] form[phx-change]")
+        |> Phoenix.LiveViewTest.render_change(%{"radius" => "10", "include_no_place" => "true"})
+      end)
+      |> apply_filters()
+      |> assert_has("[data-id=event_preview]", text: "Near Barn")
+      |> refute_has("[data-id=event_preview]", text: "Far Moor")
+    end
+
+    test "an event made by one followed person and boosted by another is listed once", %{
+      conn: conn,
+      me: me
+    } do
+      friend = other_user!()
+      booster = other_user!()
+      follow!(me, friend)
+      follow!(me, booster)
+
+      event = event!(friend, "Shared Gathering", hours(24), nil)
+      {:ok, _} = Bonfire.Social.Boosts.boost(booster, event.id)
+      {:ok, _} = Bonfire.Social.Boosts.boost(me, event.id)
+
+      {:ok, view, _html} = Phoenix.LiveViewTest.live(conn, "/events/my")
+      html = Phoenix.LiveViewTest.render(view)
+
+      assert html |> Floki.parse_document!() |> Floki.find("[data-id=event_preview]") |> length() ==
+               1
+    end
+
+    test "an event a followed person boosted is listed, and turning Boosts off in the widget hides it",
+         %{conn: conn, me: me} do
+      friend = other_user!()
+      stranger = other_user!()
+      follow!(me, friend)
+
+      event = event!(stranger, "Shared Gathering", hours(24), nil)
+      event!(friend, "Friend Own Gathering", hours(48), nil)
+      {:ok, _} = Bonfire.Social.Boosts.boost(friend, event.id)
+
+      conn
+      |> visit("/events/my")
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "Shared Gathering")
+      |> assert_has("[data-id=event_preview]", text: "Friend Own Gathering")
+      |> unwrap(fn view ->
+        view
+        |> Phoenix.LiveViewTest.element("[data-role=feed_override_toggle][name='scope[boosts]']")
+        |> Phoenix.LiveViewTest.render_click()
+      end)
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "Friend Own Gathering")
+      |> refute_has("[data-id=event_preview]", text: "Shared Gathering")
+    end
+
+    test "the chips and the tabs keep to My events and its time", %{conn: conn, me: me} do
+      Events.category_facets(:upcoming, cache: :reset)
+      topic = fake_category!(me, nil, %{type: :topic, name: "Jazz"})
+      event!(me, "Jazz Night", hours(24), nil, %{tags: [topic]})
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/my")
+      doc = Floki.parse_document!(html)
+      hrefs = doc |> Floki.find("[data-role=events_time_tabs] a") |> Floki.attribute("href")
+      assert hrefs == ["/events/my", "/events/my/past"]
+
+      conn
+      |> visit("/events/my")
+      |> wait_async()
+      |> assert_has("[data-id=events_categories] a[href^='/events/my/category/']")
+
+      conn
+      |> visit("/events/my/category/#{topic.character.username}")
+      |> wait_async()
+      |> assert_has("[data-id=event_preview]", text: "Jazz Night")
+    end
   end
 end
