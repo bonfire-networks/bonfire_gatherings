@@ -86,9 +86,8 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
   def host_name(object, activity \\ nil) do
     creator = e(object, :created, :creator, nil)
     creator_id = e(object, :created, :creator_id, nil) || id(creator)
-    subject_id = e(activity, :subject_id, nil) || id(e(activity, :subject, nil))
 
-    if creator_id && creator_id != subject_id,
+    if creator_id && not Bonfire.UI.Social.ActivityLive.creator_is_subject?(creator_id, activity),
       do: e(creator, :profile, :name, nil) || e(creator, :character, :username, nil)
   end
 
