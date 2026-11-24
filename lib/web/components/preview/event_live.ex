@@ -29,6 +29,16 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
   @doc "Its primary image is shown as its cover, in place of the calendar placeholder."
   def primary_image_as_cover?, do: true
 
+  @doc "Splits its media into the cover and the media to list. In a feed or a list: the primary image, else the first image (a remote event's banner arrives as an attachment, not flagged), and nothing listed beside the card. On the event's own page (`viewing_main_object`): no cover, all its media listed, so the full image can be opened."
+  def split_media(files, viewing_main_object \\ false)
+
+  def split_media(files, true), do: {nil, files}
+
+  def split_media(files, _viewing_main_object) do
+    {cover, _rest} = Bonfire.Files.split_cover_image(files)
+    {cover, []}
+  end
+
   @doc "What a feed loads for this card (read by the feed's preloads of `[:ui, :object_preview]` components)."
   # def preloads, do: [:post_content, :time_span, primary_geolocation: [:geolocation]]
   # with its media, which `Bonfire.UI.Social.ActivityLive` splits into the cover and the rest

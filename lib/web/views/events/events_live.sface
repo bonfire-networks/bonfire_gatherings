@@ -311,9 +311,9 @@
         {#else}
           {#for event <- day_events}
             {!-- <EventLive object={event} parent_id={"events_page_#{id(event)}"} showing_within={:events} /> --}
-            {!-- its primary image as the cover and the rest listed, as in feeds (`Bonfire.UI.Social.ActivityLive`) --}
-            {#case Bonfire.Files.split_primary_image(e(event, :files, nil))}
-              {#match {primary_image, media}}
+            {!-- its image as the cover, as in feeds (`Bonfire.UI.Social.ActivityLive`), and no list of its other media --}
+            {#case EventLive.split_media(e(event, :files, nil))}
+              {#match {primary_image, _media}}
                 {!-- <EventLive
               object={event}
               primary_image={primary_image}
@@ -330,13 +330,13 @@
                   date_in_heading
                   exclude_category_id={@selected_category_id}
                 />
-                <StatelessComponent
+                {!-- <StatelessComponent
                   :if={media != []}
                   module={maybe_component(Bonfire.UI.Social.Activity.MediaLive, @__context__)}
                   media={media}
                   parent_id={"events_page_media_#{id(event)}"}
                   showing_within={:events}
-                />
+                /> --}
             {/case}
           {/for}
         {/if}

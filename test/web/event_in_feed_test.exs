@@ -43,7 +43,7 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     |> assert_has_or_open_browser("[data-id=event_preview] a[href='/discussion/#{event.id}']")
   end
 
-  test "an event's primary image is its cover, and its other media are listed" do
+  test "an event's primary image is its cover, and its other media are not listed" do
     account = Fake.fake_account!()
     user = Fake.fake_user!(account)
     conn = conn(user: user, account: account)
@@ -83,7 +83,14 @@ defmodule Bonfire.Gatherings.Web.EventInFeedTest do
     |> visit("/feed")
     |> wait_async()
     |> assert_has_or_open_browser("[data-id=event_preview] [data-id=event_cover]")
+    |> refute_has("[data-id=multimedia_list]")
+
+    # on its own page the image is a media attachment, which opens in full, not a cropped cover
+    conn
+    |> visit("/discussion/#{event.id}")
+    |> wait_async()
     |> assert_has_or_open_browser("[data-id=multimedia_list]")
+    |> refute_has("[data-id=event_cover]")
   end
 
   describe "an event's page, with the links it keeps in extra_info" do

@@ -190,7 +190,7 @@ defmodule Bonfire.Gatherings.Web.EventsTopicStyleTest do
   end
 
   describe "a row of the list view with no image" do
-    test "has a square in the swatch and icon of its main topic, and none with no topic",
+    test "has a placeholder in the swatch and icon of its main topic, and the neutral one with no topic",
          %{conn: conn, me: me} do
       music = music_topic!(me, colour: "violet")
       {:ok, _} = Appearance.set_icon(music, "ph:music-notes-fill", skip_boundary_check: true)
@@ -203,8 +203,10 @@ defmodule Bonfire.Gatherings.Web.EventsTopicStyleTest do
       |> assert_has(
         "[data-layout=list] [data-role=event_placeholder] [iconify='ph:music-notes-fill']"
       )
-      # only the tagged one has it
-      |> assert_has("[data-layout=list] [data-role=event_placeholder]", count: 1)
+      # only the tagged one has its colour, the other is neutral (control)
+      |> assert_has("[data-layout=list] [data-role=event_placeholder].topic-violet", count: 1)
+      |> assert_has("[data-layout=list] [data-role=event_placeholder].bg-base-200", count: 1)
+      |> assert_has("[data-layout=list] [data-role=event_placeholder]", count: 2)
     end
 
     # control: the same topic and colour, but with an image, so no square
@@ -316,7 +318,8 @@ defmodule Bonfire.Gatherings.Web.EventsTopicStyleTest do
         Phoenix.LiveViewTest.render_component(
           &Bonfire.Gatherings.Web.Preview.EventCoverLive.render/1,
           object: event,
-          primary_image: nil
+          primary_image: nil,
+          __context__: %{}
         )
 
       assert html =~ "event_placeholder"

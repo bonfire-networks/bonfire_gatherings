@@ -30,7 +30,7 @@ defmodule Bonfire.Gatherings.Web.Preview.EventTileLive do
 
   @doc "The image shown as its cover: the one given, else the one flagged in its files."
   def cover(nil, object) do
-    {primary_image, _} = Bonfire.Files.split_primary_image(e(object, :files, nil))
+    {primary_image, _} = EventLive.split_media(e(object, :files, nil))
     primary_image
   end
 

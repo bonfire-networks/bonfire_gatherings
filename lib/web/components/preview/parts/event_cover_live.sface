@@ -1,33 +1,11 @@
 <div class="relative">
   {#case Bonfire.Common.Media.media_url(@primary_image)}
     {#match nil}
-      {!-- with no image, the colour (and icon) of its main topic when it has one: a wash of the topic's swatch, else the neutral grey --}
-      {#case main_topic(@object, @exclude_category_id)}
-        {#match %{colour: colour} = topic when not is_nil(colour)}
-          <div
-            data-role="event_placeholder"
-            class={[
-              "flex items-center justify-center topic-wash border-b border-divider",
-              Bonfire.Common.Swatches.class(colour),
-              @placeholder_class
-            ]}
-            aria-hidden="true"
-          >
-            {#if topic.icon}
-              <Iconify.iconify icon={topic.icon} class="size-10 topic-ink" />
-            {#else}
-              <#Icon iconify="ph:calendar-blank-bold" class="size-10 topic-ink opacity-40" />
-            {/if}
-          </div>
-        {#match _}
-          <div
-            data-role="event_placeholder"
-            class={["flex items-center justify-center bg-base-200 border-b border-divider", @placeholder_class]}
-            aria-hidden="true"
-          >
-            <#Icon iconify="ph:calendar-blank-bold" class="size-10 text-base-content/10" />
-          </div>
-      {/case}
+      <Bonfire.Gatherings.Web.Preview.EventPlaceholderLive
+        object={@object}
+        exclude_category_id={@exclude_category_id}
+        class={["border-b border-divider", @placeholder_class]}
+      />
     {#match url}
       {!-- its primary image as the cover, as an article's --}
       <div

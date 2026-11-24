@@ -1,0 +1,23 @@
+{!-- the colour (and icon) of its main topic when it has one: a wash of the topic's swatch, else the neutral grey --}
+{#case EventCoverLive.main_topic(@object, @exclude_category_id)}
+  {#match %{colour: colour} = topic when not is_nil(colour)}
+    <div
+      data-role="event_placeholder"
+      class={["flex items-center justify-center topic-wash", Bonfire.Common.Swatches.class(colour), @class]}
+      aria-hidden="true"
+    >
+      {#if topic.icon}
+        <Iconify.iconify icon={topic.icon} class={[@icon_class, "topic-ink"]} />
+      {#else}
+        <#Icon iconify="ph:calendar-blank-bold" class={[@icon_class, "topic-ink opacity-40"]} />
+      {/if}
+    </div>
+  {#match _}
+    <div
+      data-role="event_placeholder"
+      class={["flex items-center justify-center bg-base-200", @class]}
+      aria-hidden="true"
+    >
+      <#Icon iconify="ph:calendar-blank-bold" class={[@icon_class, "text-base-content/10"]} />
+    </div>
+{/case}

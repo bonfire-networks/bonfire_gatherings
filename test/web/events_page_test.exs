@@ -31,7 +31,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     event
   end
 
-  test "lists an upcoming event, with its primary image as its cover and its other media listed, and not one that has ended",
+  test "lists an upcoming event, with its primary image as its cover and its other media not listed, and not one that has ended",
        %{conn: conn, me: me} do
     {:ok, cover} =
       Bonfire.Files.upload(
@@ -52,7 +52,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     |> assert_has("[data-id=event_preview]", text: "Harvest Supper")
     |> refute_has("[data-id=event_preview]", text: "Last Year's Fair")
     |> assert_has("[data-id=event_preview] [data-id=event_cover]")
-    |> assert_has("[data-id=multimedia_list]")
+    |> refute_has("[data-id=multimedia_list]")
   end
 
   test "a card shows the event's online link beside its place, which a feed card does not load",
@@ -285,6 +285,72 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
         primary_geolocation: %{geolocation_id: geo.id},
         extra_info: %{info: info}
       })
+    end
+
+    test "a list row has its time and its place in the same row, the time first", %{
+      conn: conn,
+      me: me
+    } do
+      place_event!(me, "Barn Dance", "The Old Barn", %{
+        "online_address" => "https://meet.example.local/room"
+      })
+
+      conn
+      |> visit("/events")
+      |> wait_async()
+      |> assert_has("[data-layout=list] [data-role=event_where] time[data-role=event_time]",
+        count: 1
+      )
+      |> assert_has("[data-layout=list] [data-role=event_where] [data-role=event_place]",
+        text: "The Old Barn"
+      )
+
+      {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events")
+      {:ok, doc} = Floki.parse_document(html)
+
+      # in document order: the time, then the place, then "Online"
+      roles =
+        doc
+        |> Floki.find("[data-layout=list] [data-role=event_where] [data-role]")
+        |> Enum.flat_map(&Floki.attribute(&1, "data-role"))
+        |> Enum.filter(&(&1 in ["event_time", "event_place", "event_online"]))
+
+      assert roles == ["event_time", "event_place", "event_online"]
+    end
+
+    test "a list row shows a line of the event's description with Read more, and none without one",
+         %{conn: conn, me: me} do
+      event!(me, "Harvest Supper", hours(48), nil, %{
+        post_content: %{name: "Harvest Supper", summary: "Bring a dish to share"}
+      })
+
+      event!(me, "Barn Dance", hours(72), nil)
+
+      conn
+      |> visit("/events")
+      |> assert_has("[data-id=event_preview]", text: "Barn Dance")
+      |> assert_has("[data-layout=list] [data-role=event_summary]", count: 1)
+      |> assert_has("[data-layout=list] [data-role=event_summary]",
+        text: "Bring a dish to share"
+      )
+      |> assert_has("[data-layout=list] [data-role=event_summary] button", text: "Read more")
+    end
+
+    test "a list row of a remote event does not name its server" do
+      html =
+        Phoenix.LiveViewTest.render_component(
+          &Bonfire.Gatherings.Web.Preview.EventRowLive.render/1,
+          __context__: %{},
+          permalink: "/events/far-away",
+          object: %{
+            post_content: %{name: "Far Away Fair"},
+            peered: %{canonical_uri: "https://remote.example.local/pub/events/1"}
+          }
+        )
+
+      assert html =~ "Far Away Fair"
+      refute html =~ "event_origin"
+      refute html =~ "remote.example.local"
     end
 
     test "a list row shows a URL place as a link with the online link, a plain place as the text with none",

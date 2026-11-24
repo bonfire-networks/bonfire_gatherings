@@ -1,29 +1,86 @@
 <div
   data-id="event_preview"
   data-layout="list"
-  class="flex gap-4 px-4 py-3.5 rounded-box border border-divider bg-surface hover:bg-fill transition-colors"
+  class="@container relative overflow-hidden group flex flex-col rounded-box border border-divider bg-surface hover:bg-fill transition-colors [--row-bg:var(--surface-bg)] hover:[--row-bg:color-mix(in_oklab,var(--color-base-content)_5%,var(--color-base-100))]"
 >
-  <div class="flex-1 min-w-0 flex flex-col gap-1">
-    {#case EventLive.starts(@object)}
+  {!-- on top when narrow; from @lg the right half, under a fade from the row's background --}
+  <div class="order-first overflow-hidden @lg:absolute @lg:inset-y-0 @lg:right-0 @lg:w-1/2">
+    {#case Bonfire.Common.Media.media_url(cover(@primary_image, @object))}
       {#match nil}
+        <Bonfire.Gatherings.Web.Preview.EventPlaceholderLive
+          object={@object}
+          exclude_category_id={@exclude_category_id}
+          class="w-full aspect-[1.91/1] @lg:aspect-auto @lg:h-full motion-safe:transition-transform motion-safe:duration-500 group-hover:scale-105"
+          icon_class="size-10"
+        />
+      {#match url}
+        <div
+          data-id="event_cover"
+          role="img"
+          aria-label={Bonfire.Files.Media.media_alt(cover(@primary_image, @object))}
+          class="w-full aspect-[1.91/1] @lg:aspect-auto @lg:h-full bg-center bg-no-repeat bg-cover bg-placeholder motion-safe:transition-transform motion-safe:duration-500 group-hover:scale-105"
+          style={"background-image: url('#{url}')"}
+        />
+    {/case}
+    <div
+      class="hidden @lg:block pointer-events-none absolute inset-0 bg-linear-to-r from-(--row-bg) via-(--row-bg)/80 via-25% to-transparent to-75%"
+      aria-hidden="true"
+    />
+  </div>
+
+  <div class="relative min-w-0 flex flex-col gap-1 px-4 py-3.5 @lg:w-3/5">
+    {#case EventLive.starts(@object)}
       {#match start}
-        <div class="flex items-center gap-2 type-caption text-muted">
-          <span
-            :if={happening_now?(@object)}
-            data-role="event_now"
-            class="badge badge-sm badge-error badge-soft gap-1 font-medium"
+        {#if start || EventLive.place(@object) || EventLive.online_address(@object)}
+          {!-- div, not p: the icon is a block --}
+          <div
+            data-role="event_where"
+            class="flex flex-wrap items-center gap-x-1.5 gap-y-1 type-meta text-muted min-w-0"
           >
-            <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
-            {l("Now")}
-          </span>
-          <time data-role="event_time" datetime={start.iso}>
-            {#if @date_in_heading}
-              {DatesTimes.format_time_range(start, EventLive.ends(@object)) || l("All day")}
-            {#else}
-              {DatesTimes.format_range(start, EventLive.ends(@object))}
+            <span
+              :if={start && happening_now?(@object)}
+              data-role="event_now"
+              class="badge badge-sm badge-error badge-soft gap-1 font-medium"
+            >
+              <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              {l("Now")}
+            </span>
+            <time :if={start} data-role="event_time" datetime={start.iso}>
+              {#if @date_in_heading}
+                {DatesTimes.format_time_range(start, EventLive.ends(@object)) || l("All day")}
+              {#else}
+                {DatesTimes.format_range(start, EventLive.ends(@object))}
+              {/if}
+            </time>
+            <#Icon
+              :if={EventLive.place(@object) || EventLive.online_address(@object)}
+              iconify="ph:map-pin"
+              class="size-4 shrink-0"
+            />
+            {#if EventLive.place(@object)}
+              {#case EventLive.place_link(EventLive.place(@object))}
+                {#match nil}
+                  <span data-role="event_place" class="truncate">{EventLive.place(@object)}</span>
+                {#match url}
+                  <a
+                    data-role="event_place"
+                    href={url}
+                    target="_blank"
+                    rel="noopener nofollow"
+                    class="truncate hover:underline"
+                  >{EventLive.place(@object)}</a>
+              {/case}
             {/if}
-          </time>
-        </div>
+            <a
+              :if={EventLive.online_address(@object)}
+              data-role="event_online"
+              href={EventLive.online_address(@object)}
+              target="_blank"
+              rel="noopener nofollow"
+              class="shrink-0 hover:underline"
+            >{l("Online")}</a>
+          </div>
+        {/if}
     {/case}
 
     <LinkLive to={@permalink || path(@object)}>
@@ -40,39 +97,24 @@
         </p>
     {/case}
 
-    {!-- div, not p: the icon is a block --}
-    <div
-      :if={EventLive.place(@object) || EventLive.online_address(@object)}
-      data-role="event_where"
-      class="flex items-center gap-1.5 type-meta text-muted min-w-0"
-    >
-      <#Icon iconify="ph:map-pin" class="size-4 shrink-0" />
-      {#if EventLive.place(@object)}
-        {#case EventLive.place_link(EventLive.place(@object))}
-          {#match nil}
-            <span data-role="event_place" class="truncate">{EventLive.place(@object)}</span>
-          {#match url}
-            <a
-              data-role="event_place"
-              href={url}
-              target="_blank"
-              rel="noopener nofollow"
-              class="truncate hover:underline"
-            >{EventLive.place(@object)}</a>
-        {/case}
-      {/if}
-      <a
-        :if={EventLive.online_address(@object)}
-        data-role="event_online"
-        href={EventLive.online_address(@object)}
-        target="_blank"
-        rel="noopener nofollow"
-        class="shrink-0 hover:underline"
-      >{l("Online")}</a>
-    </div>
+    {#case EventLive.summary(@object)}
+      {#match nil}
+      {#match ""}
+      {#match text}
+        {!-- one line, "Read more" in place --}
+        <div
+          data-role="event_summary"
+          class="[&_[data-truncatable].previewable_truncate]:[-webkit-line-clamp:1]"
+        >
+          <Bonfire.UI.Common.TruncatableContentLive
+            html_body={text}
+            parent_id={deterministic_dom_id(__MODULE__, nil, nil, id(@object))}
+          />
+        </div>
+    {/case}
 
     <div
-      :if={badge_names(@object, @exclude_category_id) != [] or origin(@object)}
+      :if={badge_names(@object, @exclude_category_id) != []}
       class="flex flex-wrap items-center gap-1.5 mt-1"
     >
       {#for topic <- badge_names(@object, @exclude_category_id)}
@@ -84,37 +126,6 @@
           {topic.name}
         </span>
       {/for}
-
-      <span :if={origin(@object)} data-role="event_origin" class="type-caption text-muted">
-        {l("from %{server}", server: origin(@object))}
-      </span>
     </div>
   </div>
-
-  {#case Bonfire.Common.Media.media_url(cover(@primary_image, @object))}
-    {#match nil}
-      {!-- with no image: a square in the colour (and icon) of its main topic when it has one, as the card's and the tile's placeholder; nothing otherwise --}
-      {#case EventCoverLive.main_topic(@object, @exclude_category_id)}
-        {#match %{colour: colour} = topic when not is_nil(colour)}
-          <div
-            data-role="event_placeholder"
-            class={[
-              "size-24 shrink-0 rounded-box flex items-center justify-center topic-wash",
-              Bonfire.Common.Swatches.class(colour)
-            ]}
-            aria-hidden="true"
-          >
-            <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-8 topic-ink" />
-          </div>
-        {#match _}
-      {/case}
-    {#match url}
-      <div
-        data-id="event_cover"
-        role="img"
-        aria-label={Bonfire.Files.Media.media_alt(cover(@primary_image, @object))}
-        class="size-24 shrink-0 rounded-box bg-center bg-no-repeat bg-cover bg-placeholder"
-        style={"background-image: url('#{url}')"}
-      />
-  {/case}
 </div>
