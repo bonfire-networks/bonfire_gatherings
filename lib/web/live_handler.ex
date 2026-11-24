@@ -21,8 +21,14 @@ defmodule Bonfire.Gatherings.LiveHandler do
            NewEventButtonLive.local_creation?() ||
              {:error, l("Creating events is not enabled on this instance")},
          {:ok, event_attrs} <- event_attrs(params),
-         uploaded_media =
-           Bonfire.UI.Common.live_upload_files(current_user, params["upload_metadata"], socket),
+         # an upload placed in the description gets its stored URL there
+         {event_attrs, uploaded_media} =
+           Bonfire.UI.Common.live_upload_files_into(
+             event_attrs,
+             current_user,
+             params["upload_metadata"],
+             socket
+           ),
          # {event_attrs, place} =
          #   event_attrs
          #   |> Map.put(:uploaded_media, uploaded_media)
