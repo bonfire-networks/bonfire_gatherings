@@ -1,0 +1,72 @@
+<div class="shrink-0 flex items-center gap-1">
+  {!-- the tile and map views have no sidebar, so their filters open here --}
+  <button
+    :if={@filters}
+    type="button"
+    data-role="toggle_filters"
+    phx-click="toggle_filters"
+    aria-expanded={to_string(@filters_open)}
+    class="btn btn-sm btn-ghost"
+  >
+    <#Icon iconify="ph:sliders-horizontal" class="size-4" />
+    {l("Filters")}
+  </button>
+  {!-- literal icon names, so they are in the compiled set --}
+  <form data-id="events_layout" phx-change="set_layout">
+    <fieldset class="flex items-center gap-0.5 p-0.5 rounded-field bg-fill">
+      <legend class="sr-only">{l("Layout")}</legend>
+      <label
+        for="events_layout_list"
+        title={l("List")}
+        class="relative grid place-items-center size-8 cursor-pointer rounded-field text-muted hover:text-base-content has-[:checked]:bg-base-100 has-[:checked]:text-base-content has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-base-content"
+      >
+        <input
+          id="events_layout_list"
+          type="radio"
+          name="layout"
+          value="list"
+          checked={@value == "list"}
+          class="sr-only"
+        />
+        <#Icon iconify="ph:list-bullets" class="size-4" />
+        <span class="sr-only">{l("List")}</span>
+        <span class="touch-target-hit-area" aria-hidden="true" />
+      </label>
+      <label
+        for="events_layout_tile"
+        title={l("Tiles")}
+        class="relative grid place-items-center size-8 cursor-pointer rounded-field text-muted hover:text-base-content has-[:checked]:bg-base-100 has-[:checked]:text-base-content has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-base-content"
+      >
+        <input
+          id="events_layout_tile"
+          type="radio"
+          name="layout"
+          value="tile"
+          checked={@value == "tile"}
+          class="sr-only"
+        />
+        <#Icon iconify="ph:squares-four" class="size-4" />
+        <span class="sr-only">{l("Tiles")}</span>
+        <span class="touch-target-hit-area" aria-hidden="true" />
+      </label>
+      <label
+        :if={@maps}
+        for="events_layout_map"
+        title={l("Map")}
+        class="relative grid place-items-center size-8 cursor-pointer rounded-field text-muted hover:text-base-content has-[:checked]:bg-base-100 has-[:checked]:text-base-content has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-base-content"
+      >
+        <input
+          id="events_layout_map"
+          type="radio"
+          name="layout"
+          value="map"
+          checked={@value == "map"}
+          class="sr-only"
+        />
+        <#Icon iconify="ph:map-trifold" class="size-4" />
+        <span class="sr-only">{l("Map")}</span>
+        <span class="touch-target-hit-area" aria-hidden="true" />
+      </label>
+    </fieldset>
+  </form>
+</div>

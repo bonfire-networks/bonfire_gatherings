@@ -172,8 +172,11 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     doc = Floki.parse_document!(html)
 
     # one heading per day, in order, each before its events
-    assert ["Friday, September 20, 2030", "Saturday, September 21, 2030"] ==
-             doc |> Floki.find("[data-role=events_day]") |> Enum.map(&String.trim(Floki.text(&1)))
+    # the weekday, then the date (with its year, as 2030 is not this year)
+    assert [["Friday", "September 20, 2030"], ["Saturday", "September 21, 2030"]] ==
+             doc
+             |> Floki.find("[data-role=events_day]")
+             |> Enum.map(fn h -> h |> Floki.find("span") |> Enum.map(&String.trim(Floki.text(&1))) end)
 
     conn
     |> visit("/events")
@@ -287,7 +290,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       })
     end
 
-    test "a list row has its time and its place in the same row, the time first", %{
+    test "a list row has its time above its name and its place below it", %{
       conn: conn,
       me: me
     } do
@@ -298,9 +301,10 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       conn
       |> visit("/events")
       |> wait_async()
-      |> assert_has("[data-layout=list] [data-role=event_where] time[data-role=event_time]",
+      |> assert_has("[data-layout=list] [data-role=event_when] time[data-role=event_time]",
         count: 1
       )
+      |> refute_has("[data-layout=list] [data-role=event_where] [data-role=event_time]")
       |> assert_has("[data-layout=list] [data-role=event_where] [data-role=event_place]",
         text: "The Old Barn"
       )
@@ -308,14 +312,17 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events")
       {:ok, doc} = Floki.parse_document(html)
 
-      # in document order: the time, then the place, then "Online"
+      # in document order: the time, the name, the place, then "Online"
       roles =
         doc
-        |> Floki.find("[data-layout=list] [data-role=event_where] [data-role]")
-        |> Enum.flat_map(&Floki.attribute(&1, "data-role"))
-        |> Enum.filter(&(&1 in ["event_time", "event_place", "event_online"]))
+        |> Floki.find("[data-layout=list] *")
+        |> Enum.map(fn
+          {"h2", _, _} -> "name"
+          node -> node |> Floki.attribute("data-role") |> List.first()
+        end)
+        |> Enum.filter(&(&1 in ["event_time", "name", "event_place", "event_online"]))
 
-      assert roles == ["event_time", "event_place", "event_online"]
+      assert roles == ["event_time", "name", "event_place", "event_online"]
     end
 
     test "a list row shows a line of the event's description with Read more, and none without one",
@@ -970,18 +977,18 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       |> Enum.join(" ")
     end
 
-    test "the map view shows no Past tab; the list and tile views do", %{conn: conn, me: me} do
+    # the map shows upcoming events only, so it has no time menu
+    test "the map view shows no Past choice; the list and tile views do", %{conn: conn, me: me} do
       Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
       event!(me, "Harvest Supper", hours(48), nil)
 
       conn
       |> visit("/events")
-      |> assert_has("[data-role=events_time_tabs] [role=tab]", text: "Past")
+      |> assert_has("[data-role=events_time_menu] a", text: "Past")
 
       conn
       |> visit("/events/map")
-      |> assert_has("[data-role=events_time_tabs] [role=tab]", text: "Upcoming")
-      |> refute_has("[data-role=events_time_tabs] [role=tab]", text: "Past")
+      |> refute_has("[data-role=events_time_menu]")
     end
 
     test "choosing a radius in the Nearby row lists only the events within it, with the ones with no place; a far one comes back with a wider radius",
@@ -1106,33 +1113,41 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       |> Enum.map(&(&1 |> Floki.text() |> String.trim()))
     end
 
-    test "the top tabs are Discover and My events, and the second row Upcoming and Past; guests get no My events, and are sent to sign in from its page",
+    # the choices of the Upcoming / Past chip menu
+    defp time_labels(html) do
+      html
+      |> Floki.parse_document!()
+      |> Floki.find("[data-role=events_time_menu] a")
+      |> Enum.map(&(&1 |> Floki.text() |> String.trim()))
+    end
+
+    test "the top tabs are Discover and My events, and the time menu Upcoming and Past; guests get no My events, and are sent to sign in from its page",
          %{conn: conn, me: me} do
       # an upcoming event, so Discover stays on its upcoming list
       event!(me, "Harvest Supper", hours(48), nil)
 
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events")
       assert tab_labels(html, "events_tabs") == ["Discover", "My events"]
-      assert tab_labels(html, "events_time_tabs") == ["Upcoming", "Past"]
+      assert time_labels(html) == ["Upcoming", "Past"]
 
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/my/past")
       assert tab_labels(html, "events_tabs") == ["Discover", "My events"]
 
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn(), "/events")
       assert tab_labels(html, "events_tabs") == ["Discover"]
-      assert tab_labels(html, "events_time_tabs") == ["Upcoming", "Past"]
+      assert time_labels(html) == ["Upcoming", "Past"]
 
       guest_status = conn() |> Phoenix.ConnTest.get("/events/my") |> Map.fetch!(:status)
       assert guest_status in [301, 302]
     end
 
-    test "on the map, the tabs keep the map (Discover and My events, Upcoming), and the map has no Past tab",
+    test "on the map, the tabs keep the map (Discover and My events), and the map has no time menu",
          %{conn: conn, me: me} do
       Process.put([:bonfire, :js_config, :mapbox_api_key], "test-key")
       event!(me, "Harvest Supper", hours(48), nil)
 
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/map")
-      assert tab_labels(html, "events_time_tabs") == ["Upcoming"]
+      assert time_labels(html) == []
 
       conn
       |> visit("/events/map")
@@ -1140,20 +1155,17 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
       |> assert_path("/events/my/map")
       |> click_link("[data-role=events_tabs] a", "Discover")
       |> assert_path("/events/map")
-      |> click_link("[data-role=events_time_tabs] a", "Upcoming")
-      |> assert_path("/events/map")
 
       # control: on the list view the same links do not end in /map
       conn
       |> visit("/events")
       |> assert_has("[data-role=events_tabs] a[href='/events/my']")
       |> refute_has("[data-role=events_tabs] a[href$='/map']")
-      |> refute_has("[data-role=events_time_tabs] a[href$='/map']")
+      |> refute_has("[data-role=events_time_menu] a[href$='/map']")
 
       conn
       |> visit("/events/map")
       |> assert_has("[data-role=events_tabs] a[href='/events/my/map']")
-      |> assert_has("[data-role=events_time_tabs] a[href='/events/map']")
     end
 
     test "lists the upcoming events of people I follow and my own, not those of a stranger (which Discover lists)",
@@ -1371,7 +1383,7 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
 
       {:ok, _view, html} = Phoenix.LiveViewTest.live(conn, "/events/my")
       doc = Floki.parse_document!(html)
-      hrefs = doc |> Floki.find("[data-role=events_time_tabs] a") |> Floki.attribute("href")
+      hrefs = doc |> Floki.find("[data-role=events_time_menu] a") |> Floki.attribute("href")
       assert hrefs == ["/events/my", "/events/my/past"]
 
       conn

@@ -1,110 +1,84 @@
+{!-- the title's link covers the row; the inner links sit above it --}
 <div
   data-id="event_preview"
   data-layout="list"
-  class="@container relative overflow-hidden group flex flex-col rounded-box border border-divider bg-surface hover:bg-fill transition-colors [--row-bg:var(--surface-bg)] hover:[--row-bg:color-mix(in_oklab,var(--color-base-content)_5%,var(--color-base-100))]"
+  class="@container isolate relative flex flex-col overflow-hidden rounded-box border border-divider bg-base-100 hover:bg-fill transition-colors"
 >
-  {!-- on top when narrow; from @lg the right half, under a fade from the row's background --}
-  <div class="order-first overflow-hidden @lg:absolute @lg:inset-y-0 @lg:right-0 @lg:w-1/2">
-    {#case Bonfire.Common.Media.media_url(cover(@primary_image, @object))}
-      {#match nil}
-        <Bonfire.Gatherings.Web.Preview.EventPlaceholderLive
-          object={@object}
-          exclude_category_id={@exclude_category_id}
-          class="w-full aspect-[1.91/1] @lg:aspect-auto @lg:h-full motion-safe:transition-transform motion-safe:duration-500 group-hover:scale-105"
-          icon_class="size-10"
-        />
-      {#match url}
-        <div
-          data-id="event_cover"
-          role="img"
-          aria-label={Bonfire.Files.Media.media_alt(cover(@primary_image, @object))}
-          class="w-full aspect-[1.91/1] @lg:aspect-auto @lg:h-full bg-center bg-no-repeat bg-cover bg-placeholder motion-safe:transition-transform motion-safe:duration-500 group-hover:scale-105"
-          style={"background-image: url('#{url}')"}
-        />
-    {/case}
-    <div
-      class="hidden @lg:block pointer-events-none absolute inset-0 bg-linear-to-r from-(--row-bg) via-(--row-bg)/80 via-25% to-transparent to-75%"
-      aria-hidden="true"
-    />
-  </div>
-
-  <div class="relative min-w-0 flex flex-col gap-1 px-4 py-3.5 @lg:w-3/5">
+  {!-- narrow: cover on top; from @lg: cover on the right, faded into the text --}
+  <div class="flex flex-col p-4 @lg:w-3/5">
     {#case EventLive.starts(@object)}
+      {#match nil}
       {#match start}
-        {#if start || EventLive.place(@object) || EventLive.online_address(@object)}
-          {!-- div, not p: the icon is a block --}
-          <div
-            data-role="event_where"
-            class="flex flex-wrap items-center gap-x-1.5 gap-y-1 type-meta text-muted min-w-0"
-          >
-            <span
-              :if={start && happening_now?(@object)}
-              data-role="event_now"
-              class="badge badge-sm badge-error badge-soft gap-1 font-medium"
-            >
-              <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
+        {!-- inline, so a long range wraps after "Now ·" --}
+        <div data-role="event_when" class="type-meta text-muted tabular-nums">
+          {#if happening_now?(@object)}
+            <span data-role="event_now" class="font-medium text-error">
+              <span class="inline-block size-1.5 mr-1 align-middle rounded-full bg-current" aria-hidden="true" />
               {l("Now")}
             </span>
-            <time :if={start} data-role="event_time" datetime={start.iso}>
-              {#if @date_in_heading}
-                {DatesTimes.format_time_range(start, EventLive.ends(@object)) || l("All day")}
-              {#else}
-                {DatesTimes.format_range(start, EventLive.ends(@object))}
-              {/if}
-            </time>
-            <#Icon
-              :if={EventLive.place(@object) || EventLive.online_address(@object)}
-              iconify="ph:map-pin"
-              class="size-4 shrink-0"
-            />
-            {#if EventLive.place(@object)}
-              {#case EventLive.place_link(EventLive.place(@object))}
-                {#match nil}
-                  <span data-role="event_place" class="truncate">{EventLive.place(@object)}</span>
-                {#match url}
-                  <a
-                    data-role="event_place"
-                    href={url}
-                    target="_blank"
-                    rel="noopener nofollow"
-                    class="truncate hover:underline"
-                  >{EventLive.place(@object)}</a>
-              {/case}
+            <span aria-hidden="true">·</span>
+          {/if}
+          <time data-role="event_time" datetime={start.iso}>
+            {#if @date_in_heading}
+              {DatesTimes.format_time_range(start, EventLive.ends(@object)) || l("All day")}
+            {#else}
+              {DatesTimes.format_range(start, EventLive.ends(@object))}
             {/if}
-            <a
-              :if={EventLive.online_address(@object)}
-              data-role="event_online"
-              href={EventLive.online_address(@object)}
-              target="_blank"
-              rel="noopener nofollow"
-              class="shrink-0 hover:underline"
-            >{l("Online")}</a>
-          </div>
-        {/if}
+          </time>
+        </div>
     {/case}
 
-    <LinkLive to={@permalink || path(@object)}>
-      <h2 class="text-base font-bold text-base-content text-balance leading-snug line-clamp-2 hover:underline">
+    {!-- inset and `!`: overflow clips an outer ring, and the unlayered `a:focus-visible` beats utilities --}
+    <LinkLive
+      to={@permalink || path(@object)}
+      class="mt-1 after:absolute after:inset-0 after:rounded-box focus-visible:outline-none! focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary"
+    >
+      <h2 class="type-heading text-base-content text-balance line-clamp-3 @lg:line-clamp-2">
         {EventLive.name(@object) || l("Untitled event")}
       </h2>
     </LinkLive>
 
-    {#case host_name(@object, @activity)}
-      {#match nil}
-      {#match host}
-        <p data-role="event_host" class="type-meta text-muted truncate">
-          {l("By %{name}", name: host)}
-        </p>
+    {#case {EventLive.place(@object), EventLive.online_address(@object), host_name(@object, @activity)}}
+      {#match {nil, nil, nil}}
+      {#match {place, online, host}}
+        <div data-role="event_where" class="mt-1 flex items-center gap-x-1.5 type-meta text-muted">
+          {#if place}
+            {#case EventLive.place_link(place)}
+              {#match nil}
+                <span data-role="event_place" class="truncate">{place}</span>
+              {#match url}
+                <a
+                  data-role="event_place"
+                  href={url}
+                  target="_blank"
+                  rel="noopener nofollow"
+                  class="relative z-1 truncate hover:underline"
+                >{place}</a>
+            {/case}
+          {/if}
+          <span :if={place && online} aria-hidden="true">·</span>
+          <a
+            :if={online}
+            data-role="event_online"
+            href={online}
+            target="_blank"
+            rel="noopener nofollow"
+            class="relative z-1 shrink-0 hover:underline"
+          >{l("Online")}</a>
+          <span :if={host && (place || online)} aria-hidden="true">·</span>
+          {!-- the place truncates before the host --}
+          <span :if={host} data-role="event_host" class="shrink-0 max-w-1/2 truncate">{l("By %{name}", name: host)}</span>
+        </div>
     {/case}
 
     {#case EventLive.summary(@object)}
       {#match nil}
       {#match ""}
       {#match text}
-        {!-- one line, "Read more" in place --}
+        {!-- no `_` in these selectors (Tailwind reads it as a space); `!` beats the unlayered `.previewable_truncate` --}
         <div
           data-role="event_summary"
-          class="[&_[data-truncatable].previewable_truncate]:[-webkit-line-clamp:1]"
+          class="mt-2 [&_[data-truncatable]]:type-meta [&_[data-truncatable]]:text-muted [&_[data-truncatable]]:[-webkit-line-clamp:2]! [&_.read-more-controls]:relative [&_.read-more-controls]:z-1 [&_a]:relative [&_a]:z-1"
         >
           <Bonfire.UI.Common.TruncatableContentLive
             html_body={text}
@@ -115,17 +89,38 @@
 
     <div
       :if={badge_names(@object, @exclude_category_id) != []}
-      class="flex flex-wrap items-center gap-1.5 mt-1"
+      class="flex flex-wrap items-center gap-1.5 mt-3"
     >
       {#for topic <- badge_names(@object, @exclude_category_id)}
         <span
           data-role="event_badge"
-          class="badge badge-sm gap-1 border-0 bg-fill-strong text-base-content"
+          class="badge badge-sm gap-1 border-0 bg-fill text-base-content"
         >
           <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-3" />
           {topic.name}
         </span>
       {/for}
     </div>
+  </div>
+
+  {!-- no image: the topic's wash. From @lg it sits behind the text (`-z-1` in `isolate`), masked towards the left --}
+  <div class="order-first w-full aspect-[1.91/1] border-b border-divider overflow-hidden @lg:absolute @lg:inset-y-0 @lg:right-0 @lg:-z-1 @lg:w-1/2 @lg:aspect-auto @lg:border-0 @lg:[mask-image:linear-gradient(to_right,transparent,rgb(0_0_0/.05)_15%,rgb(0_0_0/.2)_30%,rgb(0_0_0/.45)_45%,rgb(0_0_0/.7)_60%,rgb(0_0_0/.88)_75%,black_90%)]">
+    {#case Bonfire.Common.Media.media_url(cover(@primary_image, @object))}
+      {#match nil}
+        <EventPlaceholderLive
+          object={@object}
+          exclude_category_id={@exclude_category_id}
+          class="size-full"
+          icon_class="size-10"
+        />
+      {#match url}
+        <div
+          data-id="event_cover"
+          role="img"
+          aria-label={Bonfire.Files.Media.media_alt(cover(@primary_image, @object))}
+          class="size-full bg-center bg-no-repeat bg-cover bg-placeholder"
+          style={"background-image: url('#{url}')"}
+        />
+    {/case}
   </div>
 </div>

@@ -45,7 +45,7 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
        page: "events",
        # page_title: l("Upcoming events"),
        # as on the old `/events` page, with its sidebar widget
-       page_title: l("Discover Events"),
+       page_title: l("Events"),
        sidebar_widgets: sidebar_widgets(:upcoming, false, %{}),
        page_header_icon: "ph:calendar-blank-fill",
        page_header_aside: [{Bonfire.Gatherings.Web.NewEventButtonLive, []}],
@@ -119,6 +119,10 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
 
   @doc "Whether the filters show on the page itself, as there is no sidebar to hold them: the tile and map views."
   def inline_filters?(live_action, preview), do: map_view?(live_action) or tiles?(preview)
+
+  @doc "Whether the search box shows: on the upcoming list where there is a search index, not on the past list or the map."
+  def search_box?(search_available, time, live_action),
+    do: search_available == true and time == :upcoming and not map_view?(live_action)
 
   # a topic's own path, `/events/category/<username or id>`: found with the visitor's read boundary, so one they may not read is "not found" like one that does not exist (as on the page this replaces). The param is not called `category`, which is the FEP-8a8e key.
   # def handle_params(%{"category_ref" => ref}, _uri, socket) do
@@ -328,7 +332,7 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
   @doc "Whether events are shown as tiles (in a grid)."
   def tiles?(preview), do: preview == @tile_preview
 
-  @doc "The layout dropdown's menu, as `Bonfire.UI.Groups.GroupFilterMenusLive` takes it."
+  # @doc "The layout dropdown's menu, as `Bonfire.UI.Groups.GroupFilterMenusLive` takes it."
   # def layout_menus(preview) do
   #   [
   #     # an icon already used elsewhere, so in the compiled set (`GroupFilterMenusLive` renders it from a string)
@@ -341,14 +345,6 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
   #   do: Phoenix.Component.to_form(%{"layout" => if(tiles?(preview), do: "tile", else: "list")})
   # with the map too (a page of its own, not saved), checked on the map page
   # the map only where maps can be drawn (`maps_enabled?/0`)
-  def layout_menus(preview, live_action \\ nil, maps? \\ true) do
-    [
-      # an icon already used elsewhere, so in the compiled set (`GroupFilterMenusLive` renders it from a string)
-      {:layout, "events_layout_menu", "ph:list-bullets",
-       [{"list", l("List")}, {"tile", l("Tiles")}] ++ if(maps?, do: [{"map", l("Map")}], else: []),
-       layout_value(preview, live_action), "list", l("Layout")}
-    ]
-  end
 
   @doc "Whether the instance can draw maps (`Bonfire.Geolocate.MapLive.maps_enabled?/0`), false without geolocate."
   def maps_enabled?,
@@ -396,6 +392,12 @@ defmodule Bonfire.Gatherings.Web.EventsLive do
 
   @doc "Today, Tomorrow or Yesterday for an event's start day, else nil."
   def day_word(event), do: Bonfire.Common.DatesTimes.relative_day(EventLive.starts(event))
+
+  @doc "An event's start day as a heading in two parts, `{lead, date}` (`Bonfire.Common.DatesTimes.day_heading/2`), or Date unknown."
+  def day_heading(event),
+    do:
+      Bonfire.Common.DatesTimes.day_heading(EventLive.starts(event)) ||
+        {l("Date unknown"), nil}
 
   @doc "The end of a path that keeps to the list being viewed: `/past` on the past one."
   def time_suffix(:past), do: "/past"

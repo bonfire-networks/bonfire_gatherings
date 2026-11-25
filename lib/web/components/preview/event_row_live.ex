@@ -1,6 +1,6 @@
 defmodule Bonfire.Gatherings.Web.Preview.EventRowLive do
   @moduledoc """
-  An event as a row in the events list: its cover on top when the row is narrow, else on the right half, faded into the row (a placeholder when it has no image).
+  An event as a row in the events list: its time, its name, where and who on one muted line, two lines of its description, its topics; its cover across the top when the row is narrow, else filling the right half behind the text and fading towards it (its topic's wash when it has no image). The whole row links to the event.
 
   A `custom_preview` too, as `EventTileLive` is.
   """
