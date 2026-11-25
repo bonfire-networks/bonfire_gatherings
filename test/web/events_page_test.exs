@@ -176,7 +176,9 @@ defmodule Bonfire.Gatherings.Web.EventsPageTest do
     assert [["Friday", "September 20, 2030"], ["Saturday", "September 21, 2030"]] ==
              doc
              |> Floki.find("[data-role=events_day]")
-             |> Enum.map(fn h -> h |> Floki.find("span") |> Enum.map(&String.trim(Floki.text(&1))) end)
+             |> Enum.map(fn h ->
+               h |> Floki.find("span") |> Enum.map(&String.trim(Floki.text(&1)))
+             end)
 
     conn
     |> visit("/events")

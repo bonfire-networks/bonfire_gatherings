@@ -13,7 +13,10 @@
         <div data-role="event_when" class="type-meta text-muted tabular-nums">
           {#if happening_now?(@object)}
             <span data-role="event_now" class="font-medium text-error">
-              <span class="inline-block size-1.5 mr-1 align-middle rounded-full bg-current" aria-hidden="true" />
+              <span
+                class="inline-block size-1.5 mr-1 align-middle rounded-full bg-current"
+                aria-hidden="true"
+              />
               {l("Now")}
             </span>
             <span aria-hidden="true">·</span>
@@ -92,10 +95,7 @@
       class="flex flex-wrap items-center gap-1.5 mt-3"
     >
       {#for topic <- badge_names(@object, @exclude_category_id)}
-        <span
-          data-role="event_badge"
-          class="badge badge-sm gap-1 border-0 bg-fill text-base-content"
-        >
+        <span data-role="event_badge" class="badge badge-sm gap-1 border-0 bg-fill text-base-content">
           <Iconify.iconify :if={topic.icon} icon={topic.icon} class="size-3" />
           {topic.name}
         </span>

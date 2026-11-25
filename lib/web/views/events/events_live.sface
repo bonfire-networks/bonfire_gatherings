@@ -288,10 +288,7 @@
   {#else}
     {!-- a heading per day (sticky, so the day stays in sight while scrolling through it), the cards under it showing only their times --}
     {#for {day, day_events} <- by_day(@events, sorted_by_start?(@time, @filters))}
-      <section
-        data-role="events_day_group"
-        class="relative flex flex-col gap-3"
-      >
+      <section data-role="events_day_group" class="relative flex flex-col gap-3">
         <h3
           :if={day}
           data-role="events_day"
