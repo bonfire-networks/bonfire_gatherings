@@ -55,8 +55,14 @@ defmodule Bonfire.Gatherings.Web.Preview.EventLive do
 
   def name(object), do: e(object, :post_content, :name, nil)
 
-  def summary(object),
-    do: e(object, :post_content, :summary, nil) || e(object, :post_content, :html_body, nil)
+  # the description is the body; the `summary` is shown only for an event with no body, as a remote event's `summary` is often a machine-made when-and-where text for Mastodon (Gancio, Mobilizon, WordPress Event Bridge), not its description
+  # TODO: show a real summary too, as a lead above the description on the event's page, hiding one that repeats the description's opening (as those machine-made ones do), or only for local events
+  def summary(object) do
+    case e(object, :post_content, :html_body, nil) do
+      body when body in [nil, ""] -> e(object, :post_content, :summary, nil)
+      body -> body
+    end
+  end
 
   def starts(object),
     do: DatesTimes.wall_time(e(object, :time_span, :has_beginning, nil), timezone(object))

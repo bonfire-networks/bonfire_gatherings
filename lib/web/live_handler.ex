@@ -22,7 +22,7 @@ defmodule Bonfire.Gatherings.LiveHandler do
              {:error, l("Creating events is not enabled on this instance")},
          {:ok, event_attrs} <- event_attrs(params),
          # an upload placed in the description gets its stored URL there
-         {event_attrs, uploaded_media} =
+         {event_attrs, uploaded_media} when is_map(event_attrs) <-
            Bonfire.UI.Common.live_upload_files_into(
              event_attrs,
              current_user,

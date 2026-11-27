@@ -665,8 +665,8 @@ defmodule Bonfire.Gatherings.Events do
       time_span: %{
         has_beginning: Bonfire.Common.DatesTimes.to_date_time(data["startTime"]),
         has_end: Bonfire.Common.DatesTimes.to_date_time(data["endTime"]),
-        # an unknown zone is dropped rather than refusing the event
-        timezone: known_timezone(data["timezone"])
+        # an unknown zone is dropped rather than refusing the event, and one the sender left out or got wrong comes from the offset of the start time
+        timezone: known_timezone(data["timezone"]) || offset_timezone(data["startTime"])
       },
       # tags: List.wrap(attrs[:tags]) ++ ap_category_tags(data["tag"], creator),
       tags:
@@ -693,6 +693,18 @@ defmodule Bonfire.Gatherings.Events do
     do: if(Tzdata.zone_exists?(zone), do: zone)
 
   def known_timezone(_), do: nil
+
+  @doc "The `Etc/GMT±N` zone of a time's whole-hour offset (its sign is inverted, as in IANA: `+02:00` is `Etc/GMT-2`), else nil: for `Z`, `+00:00`, `-00:00`, an offset with minutes, or no offset."
+  def offset_timezone(time) when is_binary(time) do
+    with [_, sign, hours, "00"] <- Regex.run(~r/T.*([+-])(\d{2}):?(\d{2})$/, time),
+         hours when hours != 0 <- String.to_integer(hours) do
+      known_timezone("Etc/GMT#{if sign == "+", do: "-", else: "+"}#{hours}")
+    else
+      _ -> nil
+    end
+  end
+
+  def offset_timezone(_), do: nil
 
   # the Geolocation the nested ingest made of the event's `Place` (Geolocate declares "Place"); an id-less Place has none
   defp ap_place([first | _]), do: ap_place(first)
